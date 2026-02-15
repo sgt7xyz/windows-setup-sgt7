@@ -1,0 +1,14 @@
+Ablaze.Floorp
+calibre.calibre
+charmbracelet.glow
+cURL.cURL
+Derailed.k9s
+Git.Git
+GNU.Wget2
+jqlang.jq
+jdx.mise
+Microsoft.VisualStudioCode
+MikeFarah.yq
+Neovim.Neovim
+Oracle.VirtualBox
+VideoLAN.VLC
