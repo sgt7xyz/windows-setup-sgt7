@@ -1,0 +1,53 @@
+# List of built-in Windows apps to remove, one per line.
+# Format: Appx package Name (wildcards supported, e.g. "Microsoft.XboxApp*").
+# Matched against both currently-installed packages (Get-AppxPackage -AllUsers)
+# and provisioned packages (Get-AppxProvisionedPackage -Online), so removed apps
+# don't silently come back for new user profiles or after a feature update.
+#
+# Lines starting with # are ignored. Comment out (or delete) any line you want
+# to keep on this machine.
+#
+# The single exception is the literal line "OneDrive" below - OneDrive is a
+# regular Win32 install (not an Appx package), so it's handled specially by
+# Remove-Bloatware via its own uninstaller rather than Remove-AppxPackage.
+
+# --- Xbox / gaming ---
+Microsoft.GamingApp*
+Microsoft.XboxApp*
+Microsoft.Xbox.TCUI*
+Microsoft.XboxGameOverlay*
+Microsoft.XboxGamingOverlay*
+Microsoft.XboxIdentityProvider*
+Microsoft.XboxSpeechToTextOverlay*
+
+# --- Consumer chat / social ---
+MicrosoftTeams*
+Microsoft.SkypeApp*
+Microsoft.People*
+MicrosoftCorporationII.MicrosoftFamily*
+
+# --- Widgets ---
+MicrosoftWindows.Client.WebExperience*
+
+# --- Games / trial junk ---
+Microsoft.MicrosoftSolitaireCollection*
+
+# --- News / info tiles ---
+Microsoft.BingNews*
+Microsoft.BingWeather*
+Microsoft.BingFinance*
+Microsoft.BingSports*
+
+# --- Misc first-party junk ---
+Microsoft.Microsoft3DViewer*
+Microsoft.MixedReality.Portal*
+Microsoft.MSPaint*
+Microsoft.Clipchamp*
+Microsoft.WindowsFeedbackHub*
+Microsoft.GetHelp*
+Microsoft.Getstarted*
+Microsoft.MicrosoftOfficeHub*
+Microsoft.549981C3F5F10*
+
+# --- OneDrive (handled specially, see note above) ---
+OneDrive

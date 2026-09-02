@@ -39,7 +39,10 @@ while ($true) {
     Write-Host "9.  Install Wallpapers"
     Write-Host "10. Configure Git"
     Write-Host
-    Write-Host "11. Execute all steps"
+    Write-Host "  System Cleanup & Optimization:"
+    Write-Host "11. Debloat & Optimize Windows"
+    Write-Host
+    Write-Host "12. Execute all steps (does not include Debloat & Optimize)"
     Write-Host "0.  Exit"
     Write-Host
     $choice = Read-Host "Enter the number of your choice"
@@ -76,6 +79,9 @@ while ($true) {
             Install-Git-Config -ScriptDir $scriptDir
         }
         "11" {
+            Invoke-DebloatAndOptimize -ScriptDir $scriptDir
+        }
+        "12" {
             Write-Host "Executing all setup steps..."
             Write-Host
             Invoke-All-Install-Tasks -ScriptDir $scriptDir
