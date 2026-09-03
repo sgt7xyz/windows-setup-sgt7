@@ -180,6 +180,76 @@ function Install-Chrome {
     Write-Host "Google Chrome installed successfully!"
 }
 
+# Helpers for installing fonts. Copying a .ttf/.otf into C:\Windows\Fonts by itself does
+# NOT register it with Windows - apps that look fonts up by family name (like Windows
+# Terminal) won't find it until it's also added to the Fonts registry key. These wrap
+# that properly, and notify running apps immediately so a reboot isn't required.
+if (-not ([System.Management.Automation.PSTypeName]'Win32FontHelper.NativeMethods').Type) {
+    Add-Type -Namespace Win32FontHelper -Name NativeMethods -MemberDefinition @"
+[DllImport("gdi32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+public static extern int AddFontResource(string lpFileName);
+
+[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+"@
+}
+
+function Install-SystemFont {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FontFilePath
+    )
+
+    $DestFontsDir = "$env:WINDIR\Fonts"
+    $RegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+    $FontFileName = Split-Path -Path $FontFilePath -Leaf
+    $DestPath = Join-Path $DestFontsDir $FontFileName
+
+    try {
+        Copy-Item -Path $FontFilePath -Destination $DestPath -Force
+
+        # Read the font's real family name from its own name table - that's what apps
+        # look it up by, and it doesn't always match the filename.
+        Add-Type -AssemblyName System.Drawing
+        $PrivateFonts = New-Object System.Drawing.Text.PrivateFontCollection
+        $PrivateFonts.AddFontFile($DestPath)
+        $FontFamilyName = $PrivateFonts.Families[0].Name
+        $PrivateFonts.Dispose()
+
+        $Extension = [System.IO.Path]::GetExtension($FontFileName).ToLower()
+        $RegistryValueName = if ($Extension -eq ".otf") { "$FontFamilyName (OpenType)" } else { "$FontFamilyName (TrueType)" }
+
+        if (-not (Test-Path $RegistryPath)) {
+            New-Item -Path $RegistryPath -Force | Out-Null
+        }
+        New-ItemProperty -Path $RegistryPath -Name $RegistryValueName -Value $FontFileName -PropertyType String -Force | Out-Null
+
+        # Register with GDI and notify running apps immediately, so a reboot/relogin isn't required
+        [Win32FontHelper.NativeMethods]::AddFontResource($DestPath) | Out-Null
+        $Result = [UIntPtr]::Zero
+        [Win32FontHelper.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x001D, [UIntPtr]::Zero, $null, 2, 1000, [ref]$Result) | Out-Null
+
+        return $FontFamilyName
+    } catch {
+        Write-Error "Failed to install font ${FontFileName}: $_"
+        return $null
+    }
+}
+
+function Test-FontInstalled {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FontFamilyName
+    )
+
+    $RegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+    $Fonts = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
+    if (-not $Fonts) {
+        return $false
+    }
+    return [bool]($Fonts.PSObject.Properties | Where-Object { $_.Name -like "$FontFamilyName*" })
+}
+
 # 7. Install fonts
 function Install-Fonts {
     param(
@@ -257,16 +327,15 @@ function Install-Fonts {
             }
         }
 
-        # Copy fonts from the FiraCode subdirectory to system Fonts directory
+        # Install fonts from the FiraCode subdirectory to the system Fonts directory,
+        # registering each one so apps can actually find it by family name
         Write-Host "Installing fonts to system directory..."
         $InstalledFonts = Get-ChildItem -Path $SourceFontsFiraCodeDir -Include "*.ttf", "*.otf"
-        
+
         foreach ($Font in $InstalledFonts) {
-            try {
-                Copy-Item -Path $Font.FullName -Destination $DestFontsDir -Force
-                Write-Host "Installed system font: $($Font.Name)"
-            } catch {
-                Write-Error "Failed to install system font: $($Font.Name) - $_"
+            $InstalledName = Install-SystemFont -FontFilePath $Font.FullName
+            if ($InstalledName) {
+                Write-Host "Installed system font: $($Font.Name) (registered as '$InstalledName')"
             }
         }
 
@@ -305,8 +374,36 @@ function Install-OhMyPosh {
     # Refresh PATH
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
-    # Note: Fira Code Nerd Font should be installed via Install-Fonts before this function is called
-    # This is required for Oh My Posh theme glyphs to render properly
+    # Ensure Fira Code Nerd Font is actually registered with Windows before Windows Terminal
+    # settings (which reference it by name) get applied - otherwise Terminal fails to launch
+    # with "Unable to find the following fonts". A prior run of Install-Fonts (option 7) may
+    # cover this already, but don't assume it - check and self-install if needed.
+    if (-not (Test-FontInstalled -FontFamilyName "FiraCode Nerd Font")) {
+        Write-Host "FiraCode Nerd Font not found. Installing it now..."
+
+        try {
+            & oh-my-posh font install FiraCode
+        } catch {
+            Write-Host "oh-my-posh font install failed or is unavailable: $_"
+        }
+
+        if (-not (Test-FontInstalled -FontFamilyName "FiraCode Nerd Font")) {
+            # Fall back to the copy bundled in this repo (no internet required)
+            Write-Host "Falling back to the bundled FiraCode Nerd Font files..."
+            $BundledFontsDir = Join-Path $ScriptDir "fonts\FiraCode"
+            if (Test-Path $BundledFontsDir) {
+                Get-ChildItem -Path $BundledFontsDir -Include "*.ttf", "*.otf" -Recurse | ForEach-Object {
+                    Install-SystemFont -FontFilePath $_.FullName | Out-Null
+                }
+            } else {
+                Write-Host "Warning: no bundled fonts found at $BundledFontsDir either. Run 'Install Fonts' (option 7) first, or Windows Terminal will fail to find FiraCode Nerd Font."
+            }
+        }
+
+        if (Test-FontInstalled -FontFamilyName "FiraCode Nerd Font") {
+            Write-Host "FiraCode Nerd Font installed successfully."
+        }
+    }
 
     # Copy the bundled theme to a stable user-local directory
     $OmpTheme = "catppuccin_macchiato"
@@ -496,6 +593,293 @@ function Install-Git-Config {
     git config --global core.excludesfile "%USERPROFILE%\.gitignore_global"
     git config --global --list
     Write-Host "Base configuration for Git completed. Ensure you set your username and email!"
+}
+
+# Helper for Remove-Bloatware: OneDrive is a Win32 install, not an Appx package
+function Remove-OneDrive {
+    Write-Host "Removing OneDrive..."
+    Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+
+    $OneDriveSetup = Join-Path $env:SystemRoot "SysWOW64\OneDriveSetup.exe"
+    if (-not (Test-Path $OneDriveSetup)) {
+        $OneDriveSetup = Join-Path $env:SystemRoot "System32\OneDriveSetup.exe"
+    }
+
+    if (Test-Path $OneDriveSetup) {
+        Start-Process -FilePath $OneDriveSetup -ArgumentList "/uninstall" -Wait -NoNewWindow
+        Write-Host "OneDrive uninstalled. Note: any files already synced to disk remain in your user profile - review them yourself before deleting anything."
+    } else {
+        Write-Host "OneDriveSetup.exe not found; OneDrive may already be removed, or was installed via the Microsoft Store instead."
+    }
+}
+
+# Remove built-in Windows bloatware (Xbox, consumer Teams/Chat, OneDrive, Widgets, etc.)
+function Remove-Bloatware {
+    param(
+        [string]$ScriptDir
+    )
+
+    Write-Host "Removing bloatware..."
+    $ListPath = Join-Path $ScriptDir "debloat_list.txt"
+
+    if (-not (Test-Path $ListPath)) {
+        Write-Error "Warning: debloat_list.txt not found!"
+        return
+    }
+
+    $LogDir = Join-Path $ScriptDir 'logs'
+    New-Item -Path $LogDir -ItemType Directory -Force | Out-Null
+    $LogFile = Join-Path $LogDir 'debloat.log'
+
+    $Entries = Get-Content -Path $ListPath
+
+    foreach ($Entry in $Entries) {
+        $Entry = $Entry.Trim()
+        if ([string]::IsNullOrWhiteSpace($Entry) -or $Entry.StartsWith('#')) {
+            continue
+        }
+
+        # OneDrive is a special case - not an Appx package
+        if ($Entry -eq 'OneDrive') {
+            Remove-OneDrive
+            Add-Content -Path $LogFile -Value "$(Get-Date -Format o) HANDLED: OneDrive (via OneDriveSetup.exe /uninstall)"
+            continue
+        }
+
+        $Found = $false
+
+        # Remove for all existing user profiles
+        Get-AppxPackage -Name $Entry -AllUsers -ErrorAction SilentlyContinue | ForEach-Object {
+            $Found = $true
+            try {
+                Remove-AppxPackage -Package $_.PackageFullName -AllUsers -ErrorAction Stop
+                Write-Host "Removed installed package: $($_.Name)"
+                Add-Content -Path $LogFile -Value "$(Get-Date -Format o) REMOVED: $($_.Name)"
+            } catch {
+                Write-Host "Failed to remove installed package $($_.Name): $_"
+                Add-Content -Path $LogFile -Value "$(Get-Date -Format o) FAILED: $($_.Name) - $_"
+            }
+        }
+
+        # De-provision so it doesn't come back for new profiles or after a feature update
+        Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like $Entry } | ForEach-Object {
+            $Found = $true
+            try {
+                Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction Stop | Out-Null
+                Write-Host "De-provisioned: $($_.DisplayName)"
+                Add-Content -Path $LogFile -Value "$(Get-Date -Format o) DEPROVISIONED: $($_.DisplayName)"
+            } catch {
+                Write-Host "Failed to de-provision $($_.DisplayName): $_"
+                Add-Content -Path $LogFile -Value "$(Get-Date -Format o) FAILED: $($_.DisplayName) - $_"
+            }
+        }
+
+        if (-not $Found) {
+            Write-Host "Skipping $Entry (not found/already removed)"
+            Add-Content -Path $LogFile -Value "$(Get-Date -Format o) SKIP: $Entry - not found"
+        }
+    }
+
+    # Stop Windows from re-suggesting/reinstalling consumer apps after feature updates
+    $CloudContentPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
+    if (-not (Test-Path $CloudContentPath)) {
+        New-Item -Path $CloudContentPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $CloudContentPath -Name "DisableWindowsConsumerFeatures" -Value 1 -Type DWord
+    Set-ItemProperty -Path $CloudContentPath -Name "DisableConsumerAccountStateContent" -Value 1 -Type DWord
+    Set-ItemProperty -Path $CloudContentPath -Name "DisableCloudOptimizedContent" -Value 1 -Type DWord
+
+    Write-Host "Bloatware removal completed. See $LogFile for details."
+}
+
+# Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall, dev QoL settings)
+function Optimize-WindowsPrivacyPerformance {
+    Write-Host "Applying privacy and performance tweaks..."
+
+    # --- Telemetry: set to the minimum level the SKU allows ---
+    $TelemetryPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+    if (-not (Test-Path $TelemetryPath)) {
+        New-Item -Path $TelemetryPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $TelemetryPath -Name "AllowTelemetry" -Value 1 -Type DWord
+
+    # --- Start menu / search clutter ---
+    $ExplorerPolicyPath = "HKCU:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
+    if (-not (Test-Path $ExplorerPolicyPath)) {
+        New-Item -Path $ExplorerPolicyPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $ExplorerPolicyPath -Name "DisableSearchBoxSuggestions" -Value 1 -Type DWord
+
+    $SearchPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search"
+    if (-not (Test-Path $SearchPath)) {
+        New-Item -Path $SearchPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $SearchPath -Name "BingSearchEnabled" -Value 0 -Type DWord
+    Set-ItemProperty -Path $SearchPath -Name "CortanaConsent" -Value 0 -Type DWord
+
+    # --- Suggested content / "ads" in Start and lock screen ---
+    $ContentDeliveryPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+    if (-not (Test-Path $ContentDeliveryPath)) {
+        New-Item -Path $ContentDeliveryPath -Force | Out-Null
+    }
+    $ContentDeliverySettings = @(
+        "SubscribedContent-338388Enabled",
+        "SubscribedContent-338389Enabled",
+        "SubscribedContent-353694Enabled",
+        "SubscribedContent-353696Enabled",
+        "SubscribedContent-338387Enabled",
+        "SystemPaneSuggestionsEnabled",
+        "SoftLandingEnabled",
+        "RotatingLockScreenOverlayEnabled"
+    )
+    foreach ($Setting in $ContentDeliverySettings) {
+        Set-ItemProperty -Path $ContentDeliveryPath -Name $Setting -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    }
+
+    # --- Taskbar: hide Widgets and Chat icons (apps are also removed by Remove-Bloatware) ---
+    $AdvancedPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+    if (-not (Test-Path $AdvancedPath)) {
+        New-Item -Path $AdvancedPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $AdvancedPath -Name "TaskbarDa" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $AdvancedPath -Name "TaskbarMn" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    # --- Dev-friendly Explorer settings: show file extensions and hidden files ---
+    Set-ItemProperty -Path $AdvancedPath -Name "HideFileExt" -Value 0 -Type DWord
+    Set-ItemProperty -Path $AdvancedPath -Name "Hidden" -Value 1 -Type DWord
+
+    # --- Long path support (helps with deeply nested node_modules, etc.) ---
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -Type DWord
+
+    # --- Developer Mode ---
+    $DevModePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock"
+    if (-not (Test-Path $DevModePath)) {
+        New-Item -Path $DevModePath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $DevModePath -Name "AllowDevelopmentWithoutDevLicense" -Value 1 -Type DWord
+
+    # --- Game DVR / background recording (frees up background CPU/GPU usage) ---
+    $GameDvrPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR"
+    if (-not (Test-Path $GameDvrPolicyPath)) {
+        New-Item -Path $GameDvrPolicyPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $GameDvrPolicyPath -Name "AllowGameDVR" -Value 0 -Type DWord
+
+    $GameConfigPath = "HKCU:\System\GameConfigStore"
+    if (-not (Test-Path $GameConfigPath)) {
+        New-Item -Path $GameConfigPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $GameConfigPath -Name "GameDVR_Enabled" -Value 0 -Type DWord
+
+    # --- Storage Sense (automatic temp-file cleanup) ---
+    $StorageSensePath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy"
+    if (-not (Test-Path $StorageSensePath)) {
+        New-Item -Path $StorageSensePath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $StorageSensePath -Name "01" -Value 1 -Type DWord
+
+    # --- Recall (Copilot+ PCs only) - disable via policy, and remove the optional feature if present ---
+    $AiPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"
+    if (-not (Test-Path $AiPolicyPath)) {
+        New-Item -Path $AiPolicyPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $AiPolicyPath -Name "DisableAIDataAnalysis" -Value 1 -Type DWord
+    try {
+        $RecallFeature = Get-WindowsOptionalFeature -Online -FeatureName "Recall" -ErrorAction Stop
+        if ($RecallFeature -and $RecallFeature.State -eq "Enabled") {
+            Disable-WindowsOptionalFeature -Online -FeatureName "Recall" -NoRestart -ErrorAction Stop | Out-Null
+            Write-Host "Recall optional feature disabled."
+        }
+    } catch {
+        # Not a Copilot+ PC / feature not present - nothing to do
+    }
+
+    Write-Host "Privacy and performance tweaks applied. Some settings take effect after sign-out or restart."
+}
+
+# Disable a small set of non-essential services
+# Intentionally NOT touched: Windows Defender (WinDefend), Windows Update (wuauserv),
+# BITS, the firewall (mpssvc), WMI (Winmgmt), Event Log, and Print Spooler
+# (left alone in case a printer is attached).
+function Disable-UnneededServices {
+    Write-Host "Disabling non-essential services..."
+
+    $ServicesToDisable = @(
+        "DiagTrack",         # Connected User Experiences and Telemetry
+        "dmwappushservice",  # WAP Push Message Routing (telemetry-adjacent)
+        "RetailDemo",        # Retail Demo Service
+        "Fax",                # Fax
+        "wisvc"               # Windows Insider Service
+    )
+
+    foreach ($ServiceName in $ServicesToDisable) {
+        $Service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        if (-not $Service) {
+            Write-Host "Skipping $ServiceName (not present on this system)"
+            continue
+        }
+
+        try {
+            Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $ServiceName -StartupType Disabled -ErrorAction Stop
+            Write-Host "Disabled service: $ServiceName"
+        } catch {
+            Write-Host "Failed to disable service ${ServiceName}: $_"
+        }
+    }
+
+    Write-Host "Service cleanup completed."
+}
+
+# Set a power plan appropriate for this machine (laptop vs desktop)
+function Set-PowerPlan {
+    Write-Host "Configuring power plan..."
+
+    $Battery = Get-CimInstance -ClassName Win32_Battery -ErrorAction SilentlyContinue
+    if ($Battery) {
+        Write-Host "Battery detected (laptop) - setting Balanced power plan and keeping hibernation enabled."
+        powercfg /setactive SCHEME_BALANCED
+        powercfg /hibernate on
+    } else {
+        Write-Host "No battery detected (desktop) - setting High Performance power plan and disabling hibernation to reclaim disk space."
+        powercfg /setactive SCHEME_MIN
+        powercfg /hibernate off
+    }
+}
+
+# 11. Debloat & Optimize Windows (orchestrator)
+function Invoke-DebloatAndOptimize {
+    param(
+        [string]$ScriptDir
+    )
+
+    Write-Host
+    Write-Host "WARNING: This will:"
+    Write-Host "  - Remove bloatware (Xbox, consumer Teams/Chat, OneDrive, Widgets, Solitaire,"
+    Write-Host "    Bing news/weather tiles, and similar built-in apps - see debloat_list.txt)"
+    Write-Host "  - Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall,"
+    Write-Host "    Game DVR, dev-friendly Explorer settings)"
+    Write-Host "  - Disable a small set of non-essential services (telemetry, fax, retail"
+    Write-Host "    demo, Windows Insider service)"
+    Write-Host "  - Set a power plan appropriate for this machine (laptop vs desktop)"
+    Write-Host
+    Write-Host "This does NOT touch Windows Defender, Windows Update, the firewall, UAC, or"
+    Write-Host "Print Spooler."
+    Write-Host
+    $confirm = Read-Host "Are you sure you want to proceed? [y/N]"
+    if ($confirm -notin @('y', 'Y', 'yes', 'Yes')) {
+        Write-Host "Cancelled. Returning to menu."
+        return
+    }
+
+    Remove-Bloatware -ScriptDir $ScriptDir
+    Optimize-WindowsPrivacyPerformance
+    Disable-UnneededServices
+    Set-PowerPlan
+
+    Write-Host
+    Write-Host "Debloat and optimization completed. A sign-out or restart is recommended for all changes to fully take effect."
 }
 
 function Invoke-All-Install-Tasks {

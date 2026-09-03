@@ -1,13 +1,39 @@
+# List of applications to uninstall via winget, one per line.
+# Format: winget package ID (find one with `winget search <name>`), matching
+# the ID used to install it.
+#
+# Lines starting with # are ignored. Comment out (or delete) any line you
+# don't want uninstalled. Each package is checked against what's currently
+# installed before running, and skipped if not present.
+#
+# NOTE: Microsoft.VisualStudioCode is intentionally not listed here (see
+# winget_install.txt) - it's kept installed by default.
+
+# --- Browsers ---
 Ablaze.Floorp
+
+# --- Media / eBooks ---
 calibre.calibre
+VideoLAN.VLC
+
+# --- CLI utilities ---
 charmbracelet.glow
 cURL.cURL
-Derailed.k9s
-Git.Git
 GNU.Wget2
 jqlang.jq
-jdx.mise
 MikeFarah.yq
+
+# --- Version control ---
+Git.Git
+
+# --- Tool version management ---
+jdx.mise
+
+# --- Editors / IDEs ---
 Neovim.Neovim
+
+# --- DevOps / Kubernetes ---
+Derailed.k9s
+
+# --- Virtualization ---
 Oracle.VirtualBox
-VideoLAN.VLC

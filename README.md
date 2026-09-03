@@ -82,14 +82,14 @@ The `win11Setup.ps1` script offers the following options:
 
 7. **Install Fonts** (`Install-Fonts`)
    - Adds custom fonts (`.ttf` and `.otf` files) to your system from the `fonts/` directory.
-   - Copies fonts to the Windows System Fonts directory (`C:\Windows\Fonts`).
+   - Copies fonts to the Windows System Fonts directory (`C:\Windows\Fonts`) and registers each one (registry entry, GDI notification) so apps can find it by family name immediately — not just a file copy.
    - Skips installation if no `fonts/` directory is found.
    - Reports success/failure for each font file.
 
 8. **Install Windows Terminal and Oh My Posh** (`Install-OhMyPosh`)
    - Installs Windows Terminal for a modern terminal experience.
    - Installs Oh My Posh for customizable command-line prompts and themes.
-   - Installs and registers Fira Code Nerd Font via oh-my-posh for proper theme glyph rendering.
+   - Checks whether Fira Code Nerd Font is already registered with Windows; if not, installs it via `oh-my-posh font install`, falling back to the copy bundled in `fonts/FiraCode/` if that's unavailable (no internet, etc.) — either way, the font is registered (not just copied) so Windows Terminal can find it, and no reboot is required.
    - Applies Windows Terminal settings configuration (colors, opacity, font "FiraCode Nerd Font", keybindings).
    - Configures PowerShell profiles with **mise** initialization for tool version management.
    - Mise allows you to install and manage multiple versions of tools like Terraform, Node.js, Python, and more.
@@ -135,13 +135,35 @@ The setup script automatically configures **mise** integration in your PowerShel
 ### Script Improvements
 
 - **Consolidated Terminal Setup**: The "Install Windows Terminal and Oh My Posh" step now includes terminal configuration, eliminating the need for a separate step and ensuring fonts are properly installed before applying settings.
-- **Robust Font Installation**: The `Install-NerdFont` helper function verifies font installation to prevent missing font errors when applying terminal settings.
+- **Robust Font Installation**: `Install-SystemFont` and `Test-FontInstalled` properly register fonts (registry entry + immediate refresh, not just a file copy), and `Install-OhMyPosh` checks registration before applying terminal settings to prevent "Unable to find the following fonts" errors.
 - **Intelligent Font Management**: Supports both custom fonts (via option 7) and nerd fonts for terminal themes (via option 8).
+
+### System Cleanup & Optimization
+
+11. **Debloat & Optimize Windows** (`Invoke-DebloatAndOptimize`)
+    - Not included in "Execute all steps" — this is an explicit, opt-in step since it changes default OS behavior more than the other options do.
+    - Prompts for confirmation before making any changes, and clearly states up front what it will and will not touch.
+    - Removes built-in Windows bloatware (`Remove-Bloatware`):
+      - Deletes the packages listed in `debloat_list.txt` (Xbox app/overlays, consumer Teams/Chat, Widgets, Solitaire, Bing news/weather/finance/sports tiles, 3D Viewer, Mixed Reality Portal, Paint 3D, Skype, People, Feedback Hub, Get Help, Tips, Clipchamp, Family Safety, Office Hub, Cortana app).
+      - Removes them both for existing user profiles (`Get-AppxPackage -AllUsers`) and de-provisions them (`Get-AppxProvisionedPackage`) so they don't reappear for new profiles or after a Windows feature update.
+      - Uninstalls OneDrive via its own uninstaller (it's a regular Win32 install, not an Appx package) — synced files already on disk are left in place for you to review.
+      - Sets the `DisableWindowsConsumerFeatures` policy so Windows stops re-suggesting/reinstalling consumer apps.
+      - Logs every action to `logs/debloat.log`.
+      - Fully customizable: edit `debloat_list.txt` (one Appx package name per line, wildcards supported, `#` to skip) to change what gets removed.
+    - Applies privacy/performance tweaks (`Optimize-WindowsPrivacyPerformance`):
+      - Sets telemetry to the minimum level the Windows edition allows.
+      - Disables Start menu web search/suggestions, Start/lock-screen "ad" content, and hides the Widgets/Chat taskbar icons.
+      - Disables Recall (Copilot+ PCs) via policy, and removes the optional feature if present.
+      - Disables Game DVR/background game recording.
+      - Enables developer-friendly settings: show file extensions, show hidden files, `LongPathsEnabled`, Developer Mode, Storage Sense.
+    - Disables a small set of non-essential services (`Disable-UnneededServices`): `DiagTrack`, `dmwappushservice`, `RetailDemo`, `Fax`, `wisvc` (Windows Insider Service).
+      - Deliberately does **not** touch Windows Defender, Windows Update, the firewall, WMI, Event Log, or Print Spooler.
+    - Sets an appropriate power plan (`Set-PowerPlan`): detects battery presence at runtime — Balanced with hibernation on for laptops, High Performance with hibernation off for desktops.
 
 ### Execute All
 
-11. **Execute All** (`Invoke-All-Install-Tasks`)
-    - Runs all setup tasks in the following sequence:
+12. **Execute All** (`Invoke-All-Install-Tasks`)
+    - Runs all setup tasks in the following sequence (does **not** include Debloat & Optimize — run that separately if you want it):
       1. Rename Windows PC
       2. Install winget
       3. Update and Patch Windows
@@ -158,8 +180,9 @@ The setup script automatically configures **mise** integration in your PowerShel
 
 ## Configuration Files
 
-- `winget_install.txt`: A list of applications to install via winget. Edit this file to customize which packages are installed during the "Install winget Packages" operation.
-- `winget_uninstall.txt`: A list of applications to uninstall via winget. Edit this file to customize which packages are removed during the "Uninstall winget Packages" operation.
+- `winget_install.txt`: A list of applications to install via winget, grouped into commented categories (Browsers, CLI utilities, Editors/IDEs, etc.). Edit this file to customize which packages are installed during the "Install winget Packages" operation.
+- `winget_uninstall.txt`: A list of applications to uninstall via winget, using the same categorized format as `winget_install.txt`. Edit this file to customize which packages are removed during the "Uninstall winget Packages" operation.
+- `debloat_list.txt`: A list of built-in Windows apps to remove during "Debloat & Optimize Windows", grouped into commented categories (Xbox/gaming, Consumer chat/social, etc.). Edit this file to customize which apps are removed — comment out (`#`) or delete any line you want to keep.
 - `configs/Terminal/settings.json`: Configuration file for Windows Terminal settings (colors, font, opacity, keybindings).
 
 ## Customization

@@ -91,3 +91,6 @@ perplexity_results/
 storage.sqlite
 
 .vscode/
+
+# --- Script-generated runtime output ---
+logs/

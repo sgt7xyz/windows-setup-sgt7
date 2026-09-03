@@ -1,14 +1,36 @@
+# List of applications to install via winget, one per line.
+# Format: winget package ID (find one with `winget search <name>`).
+#
+# Lines starting with # are ignored. Comment out (or delete) any line you
+# don't want installed. Each package is checked against what's already
+# installed before running, and skipped if already present.
+
+# --- Browsers ---
 Ablaze.Floorp
+
+# --- Media / eBooks ---
 calibre.calibre
+VideoLAN.VLC
+
+# --- CLI utilities ---
 charmbracelet.glow
 cURL.cURL
-Derailed.k9s
-Git.Git
 GNU.Wget2
 jqlang.jq
-jdx.mise
-Microsoft.VisualStudioCode
 MikeFarah.yq
+
+# --- Version control ---
+Git.Git
+
+# --- Tool version management ---
+jdx.mise
+
+# --- Editors / IDEs ---
+Microsoft.VisualStudioCode
 Neovim.Neovim
+
+# --- DevOps / Kubernetes ---
+Derailed.k9s
+
+# --- Virtualization ---
 Oracle.VirtualBox
-VideoLAN.VLC
