@@ -1,8 +1,8 @@
+# Windows 11 Post-Install Setup Script
+
 ![Win Logo](images/winlogo.png)
 
-<a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc/4.0/88x31.png"/></a><br/>This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons Attribution-NonCommercial 4.0 International License</a>.
-
-# Windows 11 Post-Install Setup Script
+[![Creative Commons License](https://i.creativecommons.org/l/by-nc/4.0/88x31.png)](http://creativecommons.org/licenses/by-nc/4.0/)
 
 This repository contains scripts to automate the setup and configuration of a new Windows 11 environment. The setup process is streamlined through two main PowerShell scripts: `win11Setup.ps1` and `win11Functions.ps1`.
 
@@ -15,18 +15,18 @@ This repository contains scripts to automate the setup and configuration of a ne
 
 1. **Prepare Your Environment**: Ensure that PowerShell is set to allow scripts to run by executing `Set-ExecutionPolicy RemoteSigned` from an elevated PowerShell prompt.
 
-```Powershell
-PS C:\Users\%username%\code\windows-setup-sgt7> Get-ExecutionPolicy
-Restricted
-PS C:\Users\%username%\code\windows-setup-sgt7> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-Execution Policy Change
-The execution policy helps protect you from scripts that you do not trust. Changing the execution policy might expose you to the security risks described in the
-about_Execution_Policies help topic at https:/go.microsoft.com/fwlink/?LinkID=135170. Do you want to change the execution policy?
-[Y] Yes  [A] Yes to All  [N] No  [L] No to All  [S] Suspend  [?] Help (default is "N"): A
-PS C:\Users\%username%\code\windows-setup-sgt7> Get-ExecutionPolicy
-RemoteSigned
-PS C:\Users\%username%\code\windows-setup-sgt7>
-```
+  ```powershell
+  PS C:\Users\%username%\code\windows-setup-sgt7> Get-ExecutionPolicy
+  Restricted
+  PS C:\Users\%username%\code\windows-setup-sgt7> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+  Execution Policy Change
+  The execution policy helps protect you from scripts that you do not trust. Changing the execution policy might expose you to the security risks described in the
+  about_Execution_Policies help topic at https:/go.microsoft.com/fwlink/?LinkID=135170. Do you want to change the execution policy?
+  [Y] Yes  [A] Yes to All  [N] No  [L] No to All  [S] Suspend  [?] Help (default is "N"): A
+  PS C:\Users\%username%\code\windows-setup-sgt7> Get-ExecutionPolicy
+  RemoteSigned
+  PS C:\Users\%username%\code\windows-setup-sgt7>
+  ```
 
 2. **Download the Scripts**: Clone this repository or download the scripts directly into your local machine.
 3. **Running `win11Setup.ps1`**: Navigate to the directory containing the scripts and run `.\win11Setup.ps1` from an elevated PowerShell prompt. Follow the on-screen prompts to select the setup tasks you wish to execute.
@@ -49,8 +49,8 @@ The `win11Setup.ps1` script offers the following options:
    - Installs via the Microsoft Desktop App Installer package.
 
 3. **Update and Patch Windows** (`Update-Patch-Windows`)
-   - Applies the latest Windows updates and patches using PSWindowsUpdate module.
-   - Installs NuGet package provider if not present.
+   - Applies the latest Windows updates and patches using the PSWindowsUpdate module.
+   - Installs the NuGet package provider if not present.
    - Configures Microsoft Update as a service manager.
    - Suppresses automatic reboot but recommends manual restart after completion.
    - Logs all updates to a timestamped file at `C:\<ComputerName>_<Date>_MSUpdates.log`.
@@ -89,7 +89,7 @@ The `win11Setup.ps1` script offers the following options:
 8. **Install Windows Terminal and Oh My Posh** (`Install-OhMyPosh`)
    - Installs Windows Terminal for a modern terminal experience.
    - Installs Oh My Posh for customizable command-line prompts and themes.
-   - Checks whether Fira Code Nerd Font is already registered with Windows; if not, installs it via `oh-my-posh font install`, falling back to the copy bundled in `fonts/FiraCode/` if that's unavailable (no internet, etc.) — either way, the font is registered (not just copied) so Windows Terminal can find it, and no reboot is required.
+   - Checks whether the Fira Code Nerd Font is already registered with Windows; if not, installs it via `oh-my-posh font install`, falling back to the copy bundled in `fonts/FiraCode/` if that's unavailable (no internet, etc.) — either way, the font is registered (not just copied) so Windows Terminal can find it, and no reboot is required.
    - Applies Windows Terminal settings configuration (colors, opacity, font "FiraCode Nerd Font", keybindings).
    - Configures PowerShell profiles with **mise** initialization for tool version management.
    - Mise allows you to install and manage multiple versions of tools like Terraform, Node.js, Python, and more.
@@ -114,23 +114,23 @@ The `win11Setup.ps1` script offers the following options:
     - Displays all configured git settings upon completion.
     - Recommends manual configuration of username and email after setup.
 
-### Tool Version Management with mise
+### Tool Version Management With mise
 
 The setup script automatically configures **mise** integration in your PowerShell profiles. mise is a polyglot runtime manager that simplifies version management for multiple languages and tools.
 
-**What is mise?**
+**What Is mise?**
 
 - A tool version manager that supports Terraform, Node.js, Python, Ruby, Go, Rust, and many other tools.
 - Allows you to install and manage multiple versions of the same tool without conflict.
 - Configured in `.mise.toml` files per project for version pinning and consistency.
 - Automatically activates the correct tool version when you enter a directory with a `.mise.toml` configuration.
 
-**Integration with Setup:**
+**Integration With Setup:**
 
-- The setup script adds mise bin path (`$env:USERPROFILE\.mise\bin`) to PowerShell's `$PATH`.
+- The setup script adds the mise bin path (`$env:USERPROFILE\.mise\bin`) to PowerShell's `$PATH`.
 - Initializes mise activation hooks so tool shims are available in PowerShell sessions.
 - After setup, all tools installed via mise (e.g., `mise install terraform`) will be immediately accessible in PowerShell.
-- No need to manually add paths or restart shells—mise integration is automatic.
+- No need to manually add paths or restart shells — mise integration is automatic.
 
 ### Script Improvements
 
@@ -195,4 +195,4 @@ Contributions to improve the scripts or add new functionality are welcome. Pleas
 
 ## License
 
-This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons Attribution-NonCommercial 4.0 International License</a>. See the LICENSE file for details.
+This work is licensed under a [Creative Commons Attribution-NonCommercial 4.0 International License](http://creativecommons.org/licenses/by-nc/4.0/). See the LICENSE file for details.
