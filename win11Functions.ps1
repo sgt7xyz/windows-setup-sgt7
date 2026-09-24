@@ -595,7 +595,15 @@ function Install-Git-Config {
     Write-Host "Base configuration for Git completed. Ensure you set your username and email!"
 }
 
-# Helper for Remove-Bloatware: OneDrive is a Win32 install, not an Appx package
+# Helper for Remove-Bloatware: OneDrive is a Win32 install, not an Appx package.
+# Feature updates (e.g. 24H2 -> 25H2) and Microsoft 365 installs can silently
+# reinstall OneDrive no matter what we do here, so beyond uninstalling we also
+# make it inert: a Group Policy block stops it from running/syncing even if it
+# comes back, and removing the Default profile's reinstall trigger stops every
+# *new* user account from getting a fresh install at first logon.
+# NOTE: deliberately does NOT touch OneDriveSetup.exe in System32/SysWOW64 -
+# it's a TrustedInstaller-owned protected system file; SFC/updates just
+# restore it, and messing with ownership on it can cause servicing errors.
 function Remove-OneDrive {
     Write-Host "Removing OneDrive..."
     Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
@@ -612,6 +620,45 @@ function Remove-OneDrive {
     } else {
         Write-Host "OneDriveSetup.exe not found; OneDrive may already be removed, or was installed via the Microsoft Store instead."
     }
+
+    # Policy block: the official "Prevent the usage of OneDrive for file storage"
+    # Group Policy setting. Windows respects this even after an update
+    # reinstalls OneDrive, so it just sits there and won't launch or sync.
+    Write-Host "Applying policy to block OneDrive from running..."
+    try {
+        New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive" -Force | Out-Null
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive" -Name "DisableFileSyncNGSC" -Value 1 -Type DWord
+    } catch {
+        Write-Host "Failed to set OneDrive policy block: $_"
+    }
+
+    # Remove the reinstall trigger from the Default user profile so new
+    # accounts don't get OneDrive installed at their first logon.
+    Write-Host "Removing OneDrive reinstall trigger from Default user profile..."
+    $defaultHive = Join-Path $env:SystemDrive "Users\Default\NTUSER.DAT"
+    if (Test-Path $defaultHive) {
+        $loadKey = "HKU\WindowsSetupSgt7_DefaultUser"
+        try {
+            & reg.exe load $loadKey $defaultHive 2>&1 | Out-Null
+            & reg.exe delete "$loadKey\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "OneDriveSetup" /f 2>&1 | Out-Null
+        } catch {
+            Write-Host "Failed to edit Default user profile hive: $_"
+        } finally {
+            # Ensure no lingering handles keep the hive locked, then unload it
+            [gc]::Collect()
+            [gc]::WaitForPendingFinalizers()
+            & reg.exe unload $loadKey 2>&1 | Out-Null
+        }
+    } else {
+        Write-Host "Default user hive not found at $defaultHive; skipping."
+    }
+
+    # Remove OneDrive's scheduled tasks (the updater that checks in and
+    # repairs the install) and unpin it from the Explorer sidebar.
+    Get-ScheduledTask -TaskName "OneDrive*" -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path "Registry::HKEY_CLASSES_ROOT\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" -Name "System.IsPinnedToNameSpaceTree" -Value 0 -ErrorAction SilentlyContinue
+
+    Write-Host "OneDrive is now uninstalled and blocked from reinstalling/running via policy."
 }
 
 # Remove built-in Windows bloatware (Xbox, consumer Teams/Chat, OneDrive, Widgets, etc.)
