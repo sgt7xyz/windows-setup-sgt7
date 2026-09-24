@@ -147,6 +147,7 @@ The setup script automatically configures **mise** integration in your PowerShel
       - Deletes the packages listed in `debloat_list.txt` (Xbox app/overlays, consumer Teams/Chat, Widgets, Solitaire, Bing news/weather/finance/sports tiles, 3D Viewer, Mixed Reality Portal, Paint 3D, Skype, People, Feedback Hub, Get Help, Tips, Clipchamp, Family Safety, Office Hub, Cortana app).
       - Removes them both for existing user profiles (`Get-AppxPackage -AllUsers`) and de-provisions them (`Get-AppxProvisionedPackage`) so they don't reappear for new profiles or after a Windows feature update.
       - Uninstalls OneDrive via its own uninstaller (it's a regular Win32 install, not an Appx package) — synced files already on disk are left in place for you to review.
+      - Makes OneDrive inert even if a Windows feature update reinstalls it: applies the `DisableFileSyncNGSC` policy so it won't run or sync, strips the reinstall trigger from the Default user profile so new accounts don't get it at first logon, removes its scheduled tasks, and unpins it from the Explorer sidebar. Deliberately leaves `OneDriveSetup.exe` alone in System32/SysWOW64 — it's a TrustedInstaller-owned protected file, and fighting SFC/updates over it can cause servicing errors.
       - Sets the `DisableWindowsConsumerFeatures` policy so Windows stops re-suggesting/reinstalling consumer apps.
       - Logs every action to `logs/debloat.log`.
       - Fully customizable: edit `debloat_list.txt` (one Appx package name per line, wildcards supported, `#` to skip) to change what gets removed.
