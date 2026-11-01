@@ -1124,7 +1124,7 @@ function Schedule-MaintenanceTask {
 
     try {
         Copy-Item -Path $SourceMaintenanceScript -Destination $DestMaintenanceScript -Force
-        Write-Host "✓ Copied maintenance script to: $DestMaintenanceScript" -ForegroundColor Green
+        Write-Host "[OK] Copied maintenance script to: $DestMaintenanceScript" -ForegroundColor Green
     } catch {
         Write-Error "Failed to copy maintenance script: $_"
         return
@@ -1170,9 +1170,9 @@ function Schedule-MaintenanceTask {
             -Force `
             -ErrorAction Stop | Out-Null
 
-        Write-Host "✓ Weekly task registered: Sundays at 2:00 AM" -ForegroundColor Green
+        Write-Host "[OK] Weekly task registered: Sundays at 2:00 AM" -ForegroundColor Green
     } catch {
-        Write-Host "✗ Failed to register weekly task: $_" -ForegroundColor Red
+        Write-Host "[FAIL] Failed to register weekly task: $_" -ForegroundColor Red
         return
     }
 
@@ -1207,9 +1207,9 @@ function Schedule-MaintenanceTask {
             -Force `
             -ErrorAction Stop | Out-Null
 
-        Write-Host "✓ Monthly task registered: 1st Sunday of each month at 3:00 AM" -ForegroundColor Green
+        Write-Host "[OK] Monthly task registered: 1st Sunday of each month at 3:00 AM" -ForegroundColor Green
     } catch {
-        Write-Host "✗ Failed to register monthly task: $_" -ForegroundColor Red
+        Write-Host "[FAIL] Failed to register monthly task: $_" -ForegroundColor Red
         return
     }
 
