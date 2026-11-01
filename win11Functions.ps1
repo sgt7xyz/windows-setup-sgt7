@@ -191,176 +191,6 @@ function Install-Chrome {
     Write-Host "Google Chrome installed successfully!"
 }
 
-# --- Font Installation Helpers ---
-# Copying a .ttf/.otf into C:\Windows\Fonts by itself does NOT register it with Windows
-# Apps that look fonts up by family name (like Windows Terminal) won't find it until it's
-# also added to the Fonts registry key. These helpers wrap that properly and notify running
-# apps immediately so a reboot isn't required.
-if (-not ([System.Management.Automation.PSTypeName]'Win32FontHelper.NativeMethods').Type) {
-    Add-Type -Namespace Win32FontHelper -Name NativeMethods -MemberDefinition @"
-[DllImport("gdi32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-public static extern int AddFontResource(string lpFileName);
-
-[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
-"@
-}
-
-function Install-SystemFont {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$FontFilePath
-    )
-
-    $DestFontsDir = "$env:WINDIR\Fonts"
-    $RegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
-    $FontFileName = Split-Path -Path $FontFilePath -Leaf
-    $DestPath = Join-Path $DestFontsDir $FontFileName
-
-    try {
-        Copy-Item -Path $FontFilePath -Destination $DestPath -Force
-
-        Add-Type -AssemblyName System.Drawing
-        $PrivateFonts = New-Object System.Drawing.Text.PrivateFontCollection
-        $PrivateFonts.AddFontFile($DestPath)
-        $FontFamilyName = $PrivateFonts.Families[0].Name
-        $PrivateFonts.Dispose()
-
-        $Extension = [System.IO.Path]::GetExtension($FontFileName).ToLower()
-        $RegistryValueName = if ($Extension -eq ".otf") { "$FontFamilyName (OpenType)" } else { "$FontFamilyName (TrueType)" }
-
-        if (-not (Test-Path $RegistryPath)) {
-            New-Item -Path $RegistryPath -Force | Out-Null
-        }
-        New-ItemProperty -Path $RegistryPath -Name $RegistryValueName -Value $FontFileName -PropertyType String -Force | Out-Null
-
-        [Win32FontHelper.NativeMethods]::AddFontResource($DestPath) | Out-Null
-        $Result = [UIntPtr]::Zero
-        [Win32FontHelper.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x001D, [UIntPtr]::Zero, $null, 2, 1000, [ref]$Result) | Out-Null
-
-        return $FontFamilyName
-    } catch {
-        Write-Error "Failed to install font ${FontFileName}: $_"
-        return $null
-    }
-}
-
-function Test-FontInstalled {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$FontFamilyName
-    )
-
-    $RegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
-    $Fonts = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
-    if (-not $Fonts) {
-        return $false
-    }
-    return [bool]($Fonts.PSObject.Properties | Where-Object { $_.Name -like "$FontFamilyName*" })
-}
-
-# 7. Install fonts
-function Install-Fonts {
-    param(
-        [string]$ScriptDir
-    )
-
-    Write-Host "Installing fonts..."
-    $SourceFontsDir = Join-Path $ScriptDir "fonts"
-    $SourceFontsFiraCodeDir = Join-Path $SourceFontsDir "FiraCode"
-    $DestFontsDir = "$env:WINDIR\Fonts"
-    $TempDir = Join-Path $env:TEMP "nerd-fonts-download"
-
-    # Create fonts directory if it doesn't exist
-    if (-not (Test-Path $SourceFontsDir)) {
-        New-Item -Path $SourceFontsDir -ItemType Directory -Force | Out-Null
-        Write-Host "Created fonts directory at $SourceFontsDir"
-    }
-
-    # Create FiraCode subdirectory if it doesn't exist
-    if (-not (Test-Path $SourceFontsFiraCodeDir)) {
-        New-Item -Path $SourceFontsFiraCodeDir -ItemType Directory -Force | Out-Null
-        Write-Host "Created FiraCode subdirectory at $SourceFontsFiraCodeDir"
-    }
-
-    # Create temporary directory for download
-    if (-not (Test-Path $TempDir)) {
-        New-Item -Path $TempDir -ItemType Directory -Force | Out-Null
-    }
-
-    try {
-        Write-Host "Fetching latest Fira Code Nerd font from GitHub..."
-
-        # Get the latest release info from GitHub API
-        $ApiUrl = "https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest"
-        $ReleaseInfo = Invoke-RestMethod -Uri $ApiUrl -ErrorAction Stop
-
-        # Find the FiraCode.zip asset
-        $FiraCodeAsset = $ReleaseInfo.assets | Where-Object { $_.name -eq "FiraCode.zip" }
-
-        if (-not $FiraCodeAsset) {
-            Write-Error "Could not find FiraCode.zip in the latest release. Please check https://github.com/ryanoasis/nerd-fonts/releases"
-            return
-        }
-
-        $DownloadUrl = $FiraCodeAsset.browser_download_url
-        $ZipPath = Join-Path $TempDir "FiraCode.zip"
-
-        Write-Host "Downloading Fira Code Nerd Font from: $DownloadUrl"
-        Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -ErrorAction Stop
-        Write-Host "Download completed."
-
-        # Extract to temporary directory first
-        Write-Host "Extracting fonts..."
-        $ExtractDir = Join-Path $TempDir "FiraCode"
-        if (Test-Path $ExtractDir) {
-            Remove-Item -Path $ExtractDir -Recurse -Force
-        }
-        Expand-Archive -Path $ZipPath -DestinationPath $ExtractDir -Force
-
-        # Copy font files to the fonts directory, overwriting existing
-        $FontFiles = Get-ChildItem -Path $ExtractDir -Include "*.ttf", "*.otf" -Recurse
-
-        if ($FontFiles.Count -eq 0) {
-            Write-Error "No font files found in the extracted archive."
-            return
-        }
-
-        Write-Host "Found $($FontFiles.Count) font files. Copying to $SourceFontsFiraCodeDir..."
-        foreach ($FontFile in $FontFiles) {
-            try {
-                Copy-Item -Path $FontFile.FullName -Destination $SourceFontsFiraCodeDir -Force
-                Write-Host "Copied font: $($FontFile.Name)"
-            } catch {
-                Write-Error "Failed to copy font: $($FontFile.Name) - $_"
-            }
-        }
-
-        # Install fonts from the FiraCode subdirectory to the system Fonts directory,
-        # registering each one so apps can actually find it by family name
-        Write-Host "Installing fonts to system directory..."
-        $InstalledFonts = Get-ChildItem -Path $SourceFontsFiraCodeDir -Include "*.ttf", "*.otf"
-
-        foreach ($Font in $InstalledFonts) {
-            $InstalledName = Install-SystemFont -FontFilePath $Font.FullName
-            if ($InstalledName) {
-                Write-Host "Installed system font: $($Font.Name) (registered as '$InstalledName')"
-            }
-        }
-
-        Write-Host "Fonts installed successfully!"
-
-    } catch {
-        Write-Error "Error downloading or installing fonts: $_"
-    } finally {
-        # Cleanup temporary files
-        if (Test-Path $TempDir) {
-            Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Host "Cleaned up temporary files."
-        }
-    }
-}
-
 # 8. Install Windows Terminal, Oh My Posh, and configure settings
 function Install-OhMyPosh {
     param(
@@ -517,6 +347,7 @@ $OmpInitLine
 
     Write-Host "Windows Terminal and Oh My Posh installed and configured successfully!"
 }
+
 # 9. Install wallpapers
 function Install-Wallpapers {
     param(
@@ -594,59 +425,191 @@ function Install-Git-Config {
 }
 
 # ============================================================================================
-# DEBLOATING & OPTIMIZATION FUNCTIONS (Menu option 11)
+# FONT INSTALLATION HELPERS (Support for option 7: Install Fonts)
 # ============================================================================================
 
-# 11. Debloat & Optimize Windows (orchestrator)
-function Invoke-DebloatAndOptimize {
+# SECURITY: Win32 P/Invoke is needed because copying .ttf/.otf to C:\Windows\Fonts is not
+# enough to register a font with Windows. Apps looking up fonts by family name (like Windows
+# Terminal) won't find a font until it's both copied to the Fonts directory AND registered in
+# the registry, with a GDI notification sent to running apps. Using P/Invoke to call AddFontResource
+# and SendMessageTimeout achieves immediate registration and notification without requiring a reboot.
+if (-not ([System.Management.Automation.PSTypeName]'Win32FontHelper.NativeMethods').Type) {
+    Add-Type -Namespace Win32FontHelper -Name NativeMethods -MemberDefinition @"
+[DllImport("gdi32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+public static extern int AddFontResource(string lpFileName);
+
+[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+"@
+}
+
+# Helper: Register a font in the Windows registry and notify GDI of the change.
+# This allows apps to find fonts by family name immediately, without requiring a reboot.
+function Install-SystemFont {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FontFilePath
+    )
+
+    $DestFontsDir = "$env:WINDIR\Fonts"
+    $RegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+    $FontFileName = Split-Path -Path $FontFilePath -Leaf
+    $DestPath = Join-Path $DestFontsDir $FontFileName
+
+    try {
+        Copy-Item -Path $FontFilePath -Destination $DestPath -Force
+
+        Add-Type -AssemblyName System.Drawing
+        $PrivateFonts = New-Object System.Drawing.Text.PrivateFontCollection
+        $PrivateFonts.AddFontFile($DestPath)
+        $FontFamilyName = $PrivateFonts.Families[0].Name
+        $PrivateFonts.Dispose()
+
+        $Extension = [System.IO.Path]::GetExtension($FontFileName).ToLower()
+        $RegistryValueName = if ($Extension -eq ".otf") { "$FontFamilyName (OpenType)" } else { "$FontFamilyName (TrueType)" }
+
+        if (-not (Test-Path $RegistryPath)) {
+            New-Item -Path $RegistryPath -Force | Out-Null
+        }
+        New-ItemProperty -Path $RegistryPath -Name $RegistryValueName -Value $FontFileName -PropertyType String -Force | Out-Null
+
+        [Win32FontHelper.NativeMethods]::AddFontResource($DestPath) | Out-Null
+        $Result = [UIntPtr]::Zero
+        [Win32FontHelper.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x001D, [UIntPtr]::Zero, $null, 2, 1000, [ref]$Result) | Out-Null
+
+        return $FontFamilyName
+    } catch {
+        Write-Error "Failed to install font ${FontFileName}: $_"
+        return $null
+    }
+}
+
+# Helper: Check if a font is properly registered in Windows.
+function Test-FontInstalled {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FontFamilyName
+    )
+
+    $RegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+    $Fonts = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
+    if (-not $Fonts) {
+        return $false
+    }
+    return [bool]($Fonts.PSObject.Properties | Where-Object { $_.Name -like "$FontFamilyName*" })
+}
+
+# 7. Install fonts
+function Install-Fonts {
     param(
         [string]$ScriptDir
     )
 
-    Write-Host
-    Write-Host "WARNING: This will:"
-    Write-Host "  - Remove bloatware from debloat_list.txt (Xbox, Teams, OneDrive, Widgets, etc.)"
-    Write-Host "  - Remove additional optional apps (News, Weather, Microsoft Teams, Copilot)"
-    Write-Host "  - Apply comprehensive privacy/performance tweaks:"
-    Write-Host "    * Telemetry and tracking (DiagTrack, connected experiences)"
-    Write-Host "    * Start menu, search, and Cortana suggestions (app stays functional)"
-    Write-Host "    * Edge telemetry and personalization"
-    Write-Host "    * Game DVR, Recall, Storage Sense, taskbar clutter"
-    Write-Host "    * File Explorer customizations (Quick Access, full paths)"
-    Write-Host "    * Search refinements (cloud search, activity history)"
-    Write-Host "  - Disable non-essential services (telemetry, fax, retail demo, Xbox)"
-    Write-Host "  - Optimize context menu (remove Share with, OneDrive Send To shortcuts)"
-    Write-Host "  - Set power plan (auto-detected: Balanced for laptop, High Performance for desktop)"
-    Write-Host
-    Write-Host "This does NOT touch: Windows Defender, Windows Update, Firewall, UAC, Print Spooler,"
-    Write-Host "Remote Desktop, Networking services, or any hardware-related services."
-    Write-Host
-    $confirm = Read-Host "Are you sure you want to proceed? [y/N]"
-    if ($confirm -notin @('y', 'Y', 'yes', 'Yes')) {
-        Write-Host "Cancelled. Returning to menu."
-        return
+    Write-Host "Installing fonts..."
+    $SourceFontsDir = Join-Path $ScriptDir "fonts"
+    $SourceFontsFiraCodeDir = Join-Path $SourceFontsDir "FiraCode"
+    $DestFontsDir = "$env:WINDIR\Fonts"
+    $TempDir = Join-Path $env:TEMP "nerd-fonts-download"
+
+    # Create fonts directory if it doesn't exist
+    if (-not (Test-Path $SourceFontsDir)) {
+        New-Item -Path $SourceFontsDir -ItemType Directory -Force | Out-Null
+        Write-Host "Created fonts directory at $SourceFontsDir"
     }
 
-    Remove-Bloatware -ScriptDir $ScriptDir
-    Remove-AdditionalBloatware
-    Optimize-WindowsPrivacyPerformance
-    Disable-UnneededServices
-    Optimize-ContextMenu
-    Set-PowerPlan
+    # Create FiraCode subdirectory if it doesn't exist
+    if (-not (Test-Path $SourceFontsFiraCodeDir)) {
+        New-Item -Path $SourceFontsFiraCodeDir -ItemType Directory -Force | Out-Null
+        Write-Host "Created FiraCode subdirectory at $SourceFontsFiraCodeDir"
+    }
 
-    Write-Host
-    Write-Host "Debloat and optimization completed. A sign-out or restart is recommended for all changes to fully take effect."
+    # Create temporary directory for download
+    if (-not (Test-Path $TempDir)) {
+        New-Item -Path $TempDir -ItemType Directory -Force | Out-Null
+    }
+
+    try {
+        Write-Host "Fetching latest Fira Code Nerd font from GitHub..."
+
+        # Get the latest release info from GitHub API
+        $ApiUrl = "https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest"
+        $ReleaseInfo = Invoke-RestMethod -Uri $ApiUrl -ErrorAction Stop
+
+        # Find the FiraCode.zip asset
+        $FiraCodeAsset = $ReleaseInfo.assets | Where-Object { $_.name -eq "FiraCode.zip" }
+
+        if (-not $FiraCodeAsset) {
+            Write-Error "Could not find FiraCode.zip in the latest release. Please check https://github.com/ryanoasis/nerd-fonts/releases"
+            return
+        }
+
+        $DownloadUrl = $FiraCodeAsset.browser_download_url
+        $ZipPath = Join-Path $TempDir "FiraCode.zip"
+
+        Write-Host "Downloading Fira Code Nerd Font from: $DownloadUrl"
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -ErrorAction Stop
+        Write-Host "Download completed."
+
+        # Extract to temporary directory first
+        Write-Host "Extracting fonts..."
+        $ExtractDir = Join-Path $TempDir "FiraCode"
+        if (Test-Path $ExtractDir) {
+            Remove-Item -Path $ExtractDir -Recurse -Force
+        }
+        Expand-Archive -Path $ZipPath -DestinationPath $ExtractDir -Force
+
+        # Copy font files to the fonts directory, overwriting existing
+        $FontFiles = Get-ChildItem -Path $ExtractDir -Include "*.ttf", "*.otf" -Recurse
+
+        if ($FontFiles.Count -eq 0) {
+            Write-Error "No font files found in the extracted archive."
+            return
+        }
+
+        Write-Host "Found $($FontFiles.Count) font files. Copying to $SourceFontsFiraCodeDir..."
+        foreach ($FontFile in $FontFiles) {
+            try {
+                Copy-Item -Path $FontFile.FullName -Destination $SourceFontsFiraCodeDir -Force
+                Write-Host "Copied font: $($FontFile.Name)"
+            } catch {
+                Write-Error "Failed to copy font: $($FontFile.Name) - $_"
+            }
+        }
+
+        # Install fonts from the FiraCode subdirectory to the system Fonts directory,
+        # registering each one so apps can actually find it by family name
+        Write-Host "Installing fonts to system directory..."
+        $InstalledFonts = Get-ChildItem -Path $SourceFontsFiraCodeDir -Include "*.ttf", "*.otf"
+
+        foreach ($Font in $InstalledFonts) {
+            $InstalledName = Install-SystemFont -FontFilePath $Font.FullName
+            if ($InstalledName) {
+                Write-Host "Installed system font: $($Font.Name) (registered as '$InstalledName')"
+            }
+        }
+
+        Write-Host "Fonts installed successfully!"
+
+    } catch {
+        Write-Error "Error downloading or installing fonts: $_"
+    } finally {
+        # Cleanup temporary files
+        if (Test-Path $TempDir) {
+            Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Cleaned up temporary files."
+        }
+    }
 }
 
-# Helper for Remove-Bloatware: OneDrive is a Win32 install, not an Appx package.
-# Feature updates (e.g. 24H2 -> 25H2) and Microsoft 365 installs can silently
-# reinstall OneDrive no matter what we do here, so beyond uninstalling we also
-# make it inert: a Group Policy block stops it from running/syncing even if it
-# comes back, and removing the Default profile's reinstall trigger stops every
-# *new* user account from getting a fresh install at first logon.
-# NOTE: deliberately does NOT touch OneDriveSetup.exe in System32/SysWOW64 -
-# it's a TrustedInstaller-owned protected system file; SFC/updates just
-# restore it, and messing with ownership on it can cause servicing errors.
+# ============================================================================================
+# DEBLOATING & OPTIMIZATION FUNCTIONS (Helpers for option 11)
+# ============================================================================================
+
+# Helper: Remove OneDrive (separate from Remove-Bloatware because it requires special handling)
+# OneDrive is a Win32 application, not an Appx package. Feature updates and Microsoft 365 installs
+# can silently reinstall OneDrive no matter what, so beyond uninstalling, this function also applies
+# a Group Policy block to make OneDrive inert if it gets reinstalled, and removes the reinstall
+# trigger from the Default user profile to prevent new accounts from getting it at first logon.
 function Remove-OneDrive {
     Write-Host "Removing OneDrive..."
     Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
@@ -704,7 +667,8 @@ function Remove-OneDrive {
     Write-Host "OneDrive is now uninstalled and blocked from reinstalling/running via policy."
 }
 
-# Remove built-in Windows bloatware (Xbox, consumer Teams/Chat, OneDrive, Widgets, etc.)
+# Helper: Remove built-in Windows bloatware (Xbox, consumer Teams/Chat, Widgets, etc.)
+# Uses the debloat_list.txt file for a customizable list of packages to remove.
 function Remove-Bloatware {
     param(
         [string]$ScriptDir
@@ -783,7 +747,9 @@ function Remove-Bloatware {
     Write-Host "Bloatware removal completed. See $LogFile for details."
 }
 
-# Remove common additional bloatware app packages not covered by debloat_list.txt
+# Helper: Remove additional bloatware apps not covered by debloat_list.txt
+# These are common optional app packages (News, Weather, Copilot, etc.) that might not be
+# in every user's debloat_list.txt but should be removed when doing a comprehensive debloat.
 function Remove-AdditionalBloatware {
     Write-Host "Removing additional bloatware packages..."
 
@@ -824,7 +790,7 @@ function Remove-AdditionalBloatware {
     Write-Host "Additional bloatware removal completed."
 }
 
-# Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall, dev QoL settings)
+# Helper: Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall, dev QoL settings)
 function Optimize-WindowsPrivacyPerformance {
     Write-Host "Applying privacy and performance tweaks..."
 
@@ -985,7 +951,7 @@ function Optimize-WindowsPrivacyPerformance {
     Write-Host "Privacy and performance tweaks applied. Some settings take effect after sign-out or restart."
 }
 
-# Disable a small set of non-essential services
+# Helper: Disable a small set of non-essential services
 # Intentionally NOT touched: Windows Defender (WinDefend), Windows Update (wuauserv),
 # BITS, the firewall (mpssvc), WMI (Winmgmt), Event Log, Print Spooler, Remote Desktop,
 # or any networking/hardware-related services.
@@ -1025,7 +991,7 @@ function Disable-UnneededServices {
     Write-Host "Service cleanup completed."
 }
 
-# Remove unnecessary items from Windows Explorer context menu (conservative approach)
+# Helper: Remove unnecessary items from Windows Explorer context menu (conservative approach)
 # Only removes items known to be safe to remove without breaking functionality
 function Optimize-ContextMenu {
     Write-Host "Optimizing Windows Explorer context menu..."
@@ -1060,7 +1026,7 @@ function Optimize-ContextMenu {
     }
 }
 
-# Set a power plan appropriate for this machine (laptop vs desktop)
+# Helper: Set a power plan appropriate for this machine (laptop vs desktop)
 function Set-PowerPlan {
     Write-Host "Configuring power plan..."
 
@@ -1076,7 +1042,52 @@ function Set-PowerPlan {
     }
 }
 
-# Schedule automated maintenance tasks
+# ============================================================================================
+# ORCHESTRATORS (Multi-step runners for menu options 11, 12, 13)
+# ============================================================================================
+
+# 11. Debloat & Optimize Windows (orchestrator)
+function Invoke-DebloatAndOptimize {
+    param(
+        [string]$ScriptDir
+    )
+
+    Write-Host
+    Write-Host "WARNING: This will:"
+    Write-Host "  - Remove bloatware from debloat_list.txt (Xbox, Teams, OneDrive, Widgets, etc.)"
+    Write-Host "  - Remove additional optional apps (News, Weather, Microsoft Teams, Copilot)"
+    Write-Host "  - Apply comprehensive privacy/performance tweaks:"
+    Write-Host "    * Telemetry and tracking (DiagTrack, connected experiences)"
+    Write-Host "    * Start menu, search, and Cortana suggestions (app stays functional)"
+    Write-Host "    * Edge telemetry and personalization"
+    Write-Host "    * Game DVR, Recall, Storage Sense, taskbar clutter"
+    Write-Host "    * File Explorer customizations (Quick Access, full paths)"
+    Write-Host "    * Search refinements (cloud search, activity history)"
+    Write-Host "  - Disable non-essential services (telemetry, fax, retail demo, Xbox)"
+    Write-Host "  - Optimize context menu (remove Share with, OneDrive Send To shortcuts)"
+    Write-Host "  - Set power plan (auto-detected: Balanced for laptop, High Performance for desktop)"
+    Write-Host
+    Write-Host "This does NOT touch: Windows Defender, Windows Update, Firewall, UAC, Print Spooler,"
+    Write-Host "Remote Desktop, Networking services, or any hardware-related services."
+    Write-Host
+    $confirm = Read-Host "Are you sure you want to proceed? [y/N]"
+    if ($confirm -notin @('y', 'Y', 'yes', 'Yes')) {
+        Write-Host "Cancelled. Returning to menu."
+        return
+    }
+
+    Remove-Bloatware -ScriptDir $ScriptDir
+    Remove-AdditionalBloatware
+    Optimize-WindowsPrivacyPerformance
+    Disable-UnneededServices
+    Optimize-ContextMenu
+    Set-PowerPlan
+
+    Write-Host
+    Write-Host "Debloat and optimization completed. A sign-out or restart is recommended for all changes to fully take effect."
+}
+
+# 12. Schedule Automated Maintenance Tasks (orchestrator)
 function Schedule-MaintenanceTask {
     Write-Host "Setting up automated Windows maintenance tasks..." -ForegroundColor Cyan
     Write-Host
@@ -1225,11 +1236,7 @@ function Schedule-MaintenanceTask {
     Write-Host
 }
 
-# ============================================================================================
-# ORCHESTRATORS (Multi-step runners)
-# ============================================================================================
-
-# 12. Execute all setup steps
+# 13. Execute all setup steps (orchestrator)
 function Invoke-All-Install-Tasks {
     param(
         [string]$ScriptDir
