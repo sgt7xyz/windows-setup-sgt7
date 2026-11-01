@@ -198,10 +198,10 @@ function Optimize-WindowsPrivacyPerformance {
         }
         Set-ItemProperty -Path $ActivityHistoryPath -Name "EnableActivityFeed" -Value 0 -Type DWord -ErrorAction SilentlyContinue
 
-        Write-Host "✓ Privacy and performance tweaks re-applied" -ForegroundColor Green
+        Write-Host "[OK] Privacy and performance tweaks re-applied" -ForegroundColor Green
         Add-Content -Path $LogFile -Value "$(Get-Date -Format o) SUCCESS: Privacy/performance optimizations completed"
     } catch {
-        Write-Host "✗ Error applying privacy tweaks: $_" -ForegroundColor Red
+        Write-Host "[FAIL] Error applying privacy tweaks: $_" -ForegroundColor Red
         Add-Content -Path $LogFile -Value "$(Get-Date -Format o) ERROR: Privacy tweaks failed - $_"
     }
 }
@@ -234,16 +234,16 @@ function Disable-UnneededServices {
         try {
             Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
             Set-Service -Name $ServiceName -StartupType Disabled -ErrorAction Stop
-            Write-Host "  ✓ Disabled: $ServiceName" -ForegroundColor Green
+            Write-Host "  [OK] Disabled: $ServiceName" -ForegroundColor Green
             Add-Content -Path $LogFile -Value "$(Get-Date -Format o) DISABLED: $ServiceName"
             $DisabledCount++
         } catch {
-            Write-Host "  ✗ Failed to disable $ServiceName (non-critical)" -ForegroundColor Yellow
+            Write-Host "  [FAIL] Failed to disable $ServiceName (non-critical)" -ForegroundColor Yellow
             Add-Content -Path $LogFile -Value "$(Get-Date -Format o) SKIP: $ServiceName - $_"
         }
     }
 
-    Write-Host "✓ Service optimization completed ($DisabledCount services processed)" -ForegroundColor Green
+    Write-Host "[OK] Service optimization completed ($DisabledCount services processed)" -ForegroundColor Green
     Add-Content -Path $LogFile -Value "$(Get-Date -Format o) SUCCESS: Service optimization completed - $DisabledCount services"
 }
 
@@ -255,10 +255,10 @@ function Optimize-ContextMenu {
     try {
         New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked" -Force -ErrorAction SilentlyContinue | Out-Null
         Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked" -Name "{E2BF9676-5F8F-435C-97EB-11607A5BEDF7}" -Value "" -Type String -ErrorAction SilentlyContinue
-        Write-Host "✓ Context menu optimizations applied" -ForegroundColor Green
+        Write-Host "[OK] Context menu optimizations applied" -ForegroundColor Green
         Add-Content -Path $LogFile -Value "$(Get-Date -Format o) SUCCESS: Context menu optimization completed"
     } catch {
-        Write-Host "✗ Context menu optimization skipped (non-critical): $_" -ForegroundColor Yellow
+        Write-Host "[FAIL] Context menu optimization skipped (non-critical): $_" -ForegroundColor Yellow
         Add-Content -Path $LogFile -Value "$(Get-Date -Format o) SKIP: Context menu - $_"
     }
 }
@@ -275,10 +275,10 @@ function Remove-OneDrive {
         New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive" -Force -ErrorAction SilentlyContinue | Out-Null
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive" -Name "DisableFileSyncNGSC" -Value 1 -Type DWord -ErrorAction SilentlyContinue
 
-        Write-Host "✓ OneDrive policy block re-applied" -ForegroundColor Green
+        Write-Host "[OK] OneDrive policy block re-applied" -ForegroundColor Green
         Add-Content -Path $LogFile -Value "$(Get-Date -Format o) SUCCESS: OneDrive policy block verified/re-applied"
     } catch {
-        Write-Host "✗ OneDrive check failed (non-critical): $_" -ForegroundColor Yellow
+        Write-Host "[FAIL] OneDrive check failed (non-critical): $_" -ForegroundColor Yellow
         Add-Content -Path $LogFile -Value "$(Get-Date -Format o) WARNING: OneDrive check - $_"
     }
 }

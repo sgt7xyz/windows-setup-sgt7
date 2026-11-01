@@ -1093,8 +1093,8 @@ function Schedule-MaintenanceTask {
     Write-Host
 
     # Determine installation directory
-    $SetupDir = "C:\ProgramFiles\WindowsSetup"
-    $UserLocalSetupDir = Join-Path $env:USERPROFILE 'AppData\Local\WindowsSetup'
+    $SetupDir = "C:\windows-setup"
+    $UserLocalSetupDir = Join-Path $env:USERPROFILE 'AppData\Local\windows-setup'
     $SourceMaintenanceScript = Join-Path (Split-Path -Parent $MyInvocation.PSCommandPath) 'scripts\win11-maintenance.ps1'
 
     # Prefer system-wide directory, fall back to user local
@@ -1124,7 +1124,7 @@ function Schedule-MaintenanceTask {
 
     try {
         Copy-Item -Path $SourceMaintenanceScript -Destination $DestMaintenanceScript -Force
-        Write-Host "✓ Copied maintenance script to: $DestMaintenanceScript" -ForegroundColor Green
+        Write-Host "[OK] Copied maintenance script to: $DestMaintenanceScript" -ForegroundColor Green
     } catch {
         Write-Error "Failed to copy maintenance script: $_"
         return
@@ -1141,7 +1141,7 @@ function Schedule-MaintenanceTask {
 
     # --- Weekly Maintenance Task (Every Sunday at 2 AM) ---
     $WeeklyTaskName = "Windows 11 Maintenance - Weekly"
-    $WeeklyTaskPath = "\Windows 11 Setup\$WeeklyTaskName"
+    $WeeklyTaskPath = "\windows-setup\$WeeklyTaskName"
 
     try {
         # Create task trigger for every Sunday at 2 AM
@@ -1155,14 +1155,12 @@ function Schedule-MaintenanceTask {
 
         # Create task settings (run with highest privilege, don't stop if user logs off)
         $WeeklySettings = New-ScheduledTaskSettingsSet `
-            -RunOnlyIfNetworkAvailable `
-            -RunWithoutNetwork:$false `
             -StartWhenAvailable `
             -ErrorAction Stop
 
         # Register the task
         Register-ScheduledTask -TaskName $WeeklyTaskName `
-            -TaskPath "\Windows 11 Setup\" `
+            -TaskPath "\windows-setup\" `
             -Trigger $WeeklyTrigger `
             -Action $WeeklyAction `
             -Settings $WeeklySettings `
@@ -1170,9 +1168,9 @@ function Schedule-MaintenanceTask {
             -Force `
             -ErrorAction Stop | Out-Null
 
-        Write-Host "✓ Weekly task registered: Sundays at 2:00 AM" -ForegroundColor Green
+        Write-Host "[OK] Weekly task registered: Sundays at 2:00 AM" -ForegroundColor Green
     } catch {
-        Write-Host "✗ Failed to register weekly task: $_" -ForegroundColor Red
+        Write-Host "[FAIL] Failed to register weekly task: $_" -ForegroundColor Red
         return
     }
 
@@ -1192,14 +1190,12 @@ function Schedule-MaintenanceTask {
 
         # Create task settings
         $MonthlySettings = New-ScheduledTaskSettingsSet `
-            -RunOnlyIfNetworkAvailable `
-            -RunWithoutNetwork:$false `
             -StartWhenAvailable `
             -ErrorAction Stop
 
         # Register the task
         Register-ScheduledTask -TaskName $MonthlyTaskName `
-            -TaskPath "\Windows 11 Setup\" `
+            -TaskPath "\windows-setup\" `
             -Trigger $MonthlyTrigger `
             -Action $MonthlyAction `
             -Settings $MonthlySettings `
@@ -1207,9 +1203,9 @@ function Schedule-MaintenanceTask {
             -Force `
             -ErrorAction Stop | Out-Null
 
-        Write-Host "✓ Monthly task registered: 1st Sunday of each month at 3:00 AM" -ForegroundColor Green
+        Write-Host "[OK] Monthly task registered: 1st Sunday of each month at 3:00 AM" -ForegroundColor Green
     } catch {
-        Write-Host "✗ Failed to register monthly task: $_" -ForegroundColor Red
+        Write-Host "[FAIL] Failed to register monthly task: $_" -ForegroundColor Red
         return
     }
 
@@ -1219,20 +1215,20 @@ function Schedule-MaintenanceTask {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host
     Write-Host "Configuration:" -ForegroundColor Yellow
-    Write-Host "  • Script location: $DestMaintenanceScript"
-    Write-Host "  • Logs location: $LogsDir"
-    Write-Host "  • Weekly task: Every Sunday at 2:00 AM (registry + services + context menu)"
-    Write-Host "  • Monthly task: Every Sunday at 3:00 AM (includes OneDrive check)"
-    Write-Host "  • Privilege level: SYSTEM (highest)"
+    Write-Host "  * Script location: $DestMaintenanceScript"
+    Write-Host "  * Logs location: $LogsDir"
+    Write-Host "  * Weekly task: Every Sunday at 2:00 AM (registry + services + context menu)"
+    Write-Host "  * Monthly task: Every Sunday at 3:00 AM (includes OneDrive check)"
+    Write-Host "  * Privilege level: SYSTEM (highest)"
     Write-Host
     Write-Host "To manage tasks:" -ForegroundColor Yellow
-    Write-Host "  • Open Task Scheduler"
-    Write-Host "  • Navigate to: Task Scheduler Library > Windows 11 Setup"
-    Write-Host "  • View logs in: $LogsDir"
+    Write-Host "  * Open Task Scheduler"
+    Write-Host "  * Navigate to: Task Scheduler Library > windows-setup"
+    Write-Host "  * View logs in: $LogsDir"
     Write-Host
     Write-Host "To remove tasks (if needed):" -ForegroundColor Yellow
-    Write-Host "  • Run as admin: Unregister-ScheduledTask -TaskName 'Windows 11 Maintenance - Weekly' -Confirm:`$false"
-    Write-Host "  • Run as admin: Unregister-ScheduledTask -TaskName 'Windows 11 Maintenance - Monthly' -Confirm:`$false"
+    Write-Host "  * Run as admin: Unregister-ScheduledTask -TaskName 'Windows 11 Maintenance - Weekly' -Confirm:`$false"
+    Write-Host "  * Run as admin: Unregister-ScheduledTask -TaskName 'Windows 11 Maintenance - Monthly' -Confirm:`$false"
     Write-Host
 }
 
