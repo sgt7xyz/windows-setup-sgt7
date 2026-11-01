@@ -1,6 +1,11 @@
 #!/usr/bin/env pwsh
 
-# PowerShell script for Windows 11 setup
+# ---------------------------------------------------------------
+# File:     win11Setup.ps1
+# Purpose:  Interactive menu-driven Windows 11 setup and configuration script
+# Project:  Windows 11 Setup Script
+# Author:   sgt7 LLC
+# ---------------------------------------------------------------
 
 # Get the script directory
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path

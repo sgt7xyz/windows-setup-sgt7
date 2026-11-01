@@ -1,5 +1,12 @@
 #!/usr/bin/env pwsh
 
+# ---------------------------------------------------------------
+# File:     win11-maintenance.ps1
+# Purpose:  Automated maintenance script that runs via Task Scheduler to maintain Windows 11 cleanliness
+# Project:  Windows 11 Setup Script
+# Author:   sgt7 LLC
+# ---------------------------------------------------------------
+
 <#
 .SYNOPSIS
 Windows 11 Maintenance Script - Periodically maintains Windows cleanliness

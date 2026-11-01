@@ -1,5 +1,12 @@
 #!/usr/bin/env pwsh
 
+# ---------------------------------------------------------------
+# File:     win11Functions.ps1
+# Purpose:  PowerShell functions for Windows 11 setup, debloating, and maintenance tasks
+# Project:  Windows 11 Setup Script
+# Author:   sgt7 LLC
+# ---------------------------------------------------------------
+
 # ============================================================================================
 # INSTALLATION FUNCTIONS (Menu options 1-10)
 # ============================================================================================
