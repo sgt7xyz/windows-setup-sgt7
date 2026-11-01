@@ -1093,8 +1093,8 @@ function Schedule-MaintenanceTask {
     Write-Host
 
     # Determine installation directory
-    $SetupDir = "C:\ProgramFiles\WindowsSetup"
-    $UserLocalSetupDir = Join-Path $env:USERPROFILE 'AppData\Local\WindowsSetup'
+    $SetupDir = "C:\windows-setup"
+    $UserLocalSetupDir = Join-Path $env:USERPROFILE 'AppData\Local\windows-setup'
     $SourceMaintenanceScript = Join-Path (Split-Path -Parent $MyInvocation.PSCommandPath) 'scripts\win11-maintenance.ps1'
 
     # Prefer system-wide directory, fall back to user local
@@ -1141,7 +1141,7 @@ function Schedule-MaintenanceTask {
 
     # --- Weekly Maintenance Task (Every Sunday at 2 AM) ---
     $WeeklyTaskName = "Windows 11 Maintenance - Weekly"
-    $WeeklyTaskPath = "\Windows 11 Setup\$WeeklyTaskName"
+    $WeeklyTaskPath = "\windows-setup\$WeeklyTaskName"
 
     try {
         # Create task trigger for every Sunday at 2 AM
@@ -1161,7 +1161,7 @@ function Schedule-MaintenanceTask {
 
         # Register the task
         Register-ScheduledTask -TaskName $WeeklyTaskName `
-            -TaskPath "\Windows 11 Setup\" `
+            -TaskPath "\windows-setup\" `
             -Trigger $WeeklyTrigger `
             -Action $WeeklyAction `
             -Settings $WeeklySettings `
@@ -1197,7 +1197,7 @@ function Schedule-MaintenanceTask {
 
         # Register the task
         Register-ScheduledTask -TaskName $MonthlyTaskName `
-            -TaskPath "\Windows 11 Setup\" `
+            -TaskPath "\windows-setup\" `
             -Trigger $MonthlyTrigger `
             -Action $MonthlyAction `
             -Settings $MonthlySettings `
@@ -1225,7 +1225,7 @@ function Schedule-MaintenanceTask {
     Write-Host
     Write-Host "To manage tasks:" -ForegroundColor Yellow
     Write-Host "  • Open Task Scheduler"
-    Write-Host "  • Navigate to: Task Scheduler Library > Windows 11 Setup"
+    Write-Host "  • Navigate to: Task Scheduler Library > windows-setup"
     Write-Host "  • View logs in: $LogsDir"
     Write-Host
     Write-Host "To remove tasks (if needed):" -ForegroundColor Yellow
