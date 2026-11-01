@@ -1215,20 +1215,20 @@ function Schedule-MaintenanceTask {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host
     Write-Host "Configuration:" -ForegroundColor Yellow
-    Write-Host "  • Script location: $DestMaintenanceScript"
-    Write-Host "  • Logs location: $LogsDir"
-    Write-Host "  • Weekly task: Every Sunday at 2:00 AM (registry + services + context menu)"
-    Write-Host "  • Monthly task: Every Sunday at 3:00 AM (includes OneDrive check)"
-    Write-Host "  • Privilege level: SYSTEM (highest)"
+    Write-Host "  * Script location: $DestMaintenanceScript"
+    Write-Host "  * Logs location: $LogsDir"
+    Write-Host "  * Weekly task: Every Sunday at 2:00 AM (registry + services + context menu)"
+    Write-Host "  * Monthly task: Every Sunday at 3:00 AM (includes OneDrive check)"
+    Write-Host "  * Privilege level: SYSTEM (highest)"
     Write-Host
     Write-Host "To manage tasks:" -ForegroundColor Yellow
-    Write-Host "  • Open Task Scheduler"
-    Write-Host "  • Navigate to: Task Scheduler Library > windows-setup"
-    Write-Host "  • View logs in: $LogsDir"
+    Write-Host "  * Open Task Scheduler"
+    Write-Host "  * Navigate to: Task Scheduler Library > windows-setup"
+    Write-Host "  * View logs in: $LogsDir"
     Write-Host
     Write-Host "To remove tasks (if needed):" -ForegroundColor Yellow
-    Write-Host "  • Run as admin: Unregister-ScheduledTask -TaskName 'Windows 11 Maintenance - Weekly' -Confirm:`$false"
-    Write-Host "  • Run as admin: Unregister-ScheduledTask -TaskName 'Windows 11 Maintenance - Monthly' -Confirm:`$false"
+    Write-Host "  * Run as admin: Unregister-ScheduledTask -TaskName 'Windows 11 Maintenance - Weekly' -Confirm:`$false"
+    Write-Host "  * Run as admin: Unregister-ScheduledTask -TaskName 'Windows 11 Maintenance - Monthly' -Confirm:`$false"
     Write-Host
 }
 
