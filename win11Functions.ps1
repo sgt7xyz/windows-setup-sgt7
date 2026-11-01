@@ -1155,8 +1155,7 @@ function Schedule-MaintenanceTask {
 
         # Create task settings (run with highest privilege, don't stop if user logs off)
         $WeeklySettings = New-ScheduledTaskSettingsSet `
-            -RunOnlyIfNetworkAvailable `
-            -RunWithoutNetwork:$false `
+            -RunWithoutNetwork `
             -StartWhenAvailable `
             -ErrorAction Stop
 
@@ -1192,8 +1191,7 @@ function Schedule-MaintenanceTask {
 
         # Create task settings
         $MonthlySettings = New-ScheduledTaskSettingsSet `
-            -RunOnlyIfNetworkAvailable `
-            -RunWithoutNetwork:$false `
+            -RunWithoutNetwork `
             -StartWhenAvailable `
             -ErrorAction Stop
 
