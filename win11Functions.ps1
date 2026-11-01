@@ -1,5 +1,9 @@
 #!/usr/bin/env pwsh
 
+# ============================================================================================
+# INSTALLATION FUNCTIONS (Menu options 1-10)
+# ============================================================================================
+
 # 1. Rename Windows PC
 function Rename-WindowsPC {
     param(
@@ -180,10 +184,11 @@ function Install-Chrome {
     Write-Host "Google Chrome installed successfully!"
 }
 
-# Helpers for installing fonts. Copying a .ttf/.otf into C:\Windows\Fonts by itself does
-# NOT register it with Windows - apps that look fonts up by family name (like Windows
-# Terminal) won't find it until it's also added to the Fonts registry key. These wrap
-# that properly, and notify running apps immediately so a reboot isn't required.
+# --- Font Installation Helpers ---
+# Copying a .ttf/.otf into C:\Windows\Fonts by itself does NOT register it with Windows
+# Apps that look fonts up by family name (like Windows Terminal) won't find it until it's
+# also added to the Fonts registry key. These helpers wrap that properly and notify running
+# apps immediately so a reboot isn't required.
 if (-not ([System.Management.Automation.PSTypeName]'Win32FontHelper.NativeMethods').Type) {
     Add-Type -Namespace Win32FontHelper -Name NativeMethods -MemberDefinition @"
 [DllImport("gdi32.dll", CharSet = CharSet.Auto, SetLastError = true)]
@@ -208,8 +213,6 @@ function Install-SystemFont {
     try {
         Copy-Item -Path $FontFilePath -Destination $DestPath -Force
 
-        # Read the font's real family name from its own name table - that's what apps
-        # look it up by, and it doesn't always match the filename.
         Add-Type -AssemblyName System.Drawing
         $PrivateFonts = New-Object System.Drawing.Text.PrivateFontCollection
         $PrivateFonts.AddFontFile($DestPath)
@@ -224,7 +227,6 @@ function Install-SystemFont {
         }
         New-ItemProperty -Path $RegistryPath -Name $RegistryValueName -Value $FontFileName -PropertyType String -Force | Out-Null
 
-        # Register with GDI and notify running apps immediately, so a reboot/relogin isn't required
         [Win32FontHelper.NativeMethods]::AddFontResource($DestPath) | Out-Null
         $Result = [UIntPtr]::Zero
         [Win32FontHelper.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x001D, [UIntPtr]::Zero, $null, 2, 1000, [ref]$Result) | Out-Null
@@ -281,14 +283,14 @@ function Install-Fonts {
 
     try {
         Write-Host "Fetching latest Fira Code Nerd font from GitHub..."
-        
+
         # Get the latest release info from GitHub API
         $ApiUrl = "https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest"
         $ReleaseInfo = Invoke-RestMethod -Uri $ApiUrl -ErrorAction Stop
-        
+
         # Find the FiraCode.zip asset
         $FiraCodeAsset = $ReleaseInfo.assets | Where-Object { $_.name -eq "FiraCode.zip" }
-        
+
         if (-not $FiraCodeAsset) {
             Write-Error "Could not find FiraCode.zip in the latest release. Please check https://github.com/ryanoasis/nerd-fonts/releases"
             return
@@ -296,7 +298,7 @@ function Install-Fonts {
 
         $DownloadUrl = $FiraCodeAsset.browser_download_url
         $ZipPath = Join-Path $TempDir "FiraCode.zip"
-        
+
         Write-Host "Downloading Fira Code Nerd Font from: $DownloadUrl"
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -ErrorAction Stop
         Write-Host "Download completed."
@@ -311,7 +313,7 @@ function Install-Fonts {
 
         # Copy font files to the fonts directory, overwriting existing
         $FontFiles = Get-ChildItem -Path $ExtractDir -Include "*.ttf", "*.otf" -Recurse
-        
+
         if ($FontFiles.Count -eq 0) {
             Write-Error "No font files found in the extracted archive."
             return
@@ -508,18 +510,7 @@ $OmpInitLine
 
     Write-Host "Windows Terminal and Oh My Posh installed and configured successfully!"
 }
-
-# 9. Configure Windows Terminal (now integrated into Install-OhMyPosh)
-function Install-TerminalConfig {
-    param(
-        [string]$ScriptDir
-    )
-
-    Write-Host "Windows Terminal configuration is now handled by 'Install Windows Terminal and Oh My Posh' (option 8)."
-    Write-Host "Please run option 8 to install and configure Windows Terminal."
-}
-
-# 10. Install wallpapers
+# 9. Install wallpapers
 function Install-Wallpapers {
     param(
         [string]$ScriptDir
@@ -569,22 +560,22 @@ public class Wallpaper {
     Write-Host "Wallpapers installed successfully!"
 }
 
-# 11. Configure Git
+# 10. Configure Git
 function Install-Git-Config {
     param(
         [string]$ScriptDir
     )
-    
+
     Write-Host "Configuring Git..."
     $GitIgnoreGlobalPath = Join-Path $ScriptDir "configs\Git\.gitignore_global"
-    
+
     if (Test-Path $GitIgnoreGlobalPath) {
         Copy-Item -Path $GitIgnoreGlobalPath -Destination "$env:USERPROFILE\.gitignore_global" -Force
         Write-Host ".gitignore_global copied to $env:USERPROFILE"
     } else {
         Write-Host "Warning: configs\Git\.gitignore_global not found!"
     }
-    
+
     git config --global init.defaultBranch main
     git config --global color.ui auto
     git config --global core.editor "code"
@@ -593,6 +584,44 @@ function Install-Git-Config {
     git config --global core.excludesfile "%USERPROFILE%\.gitignore_global"
     git config --global --list
     Write-Host "Base configuration for Git completed. Ensure you set your username and email!"
+}
+
+# ============================================================================================
+# DEBLOATING & OPTIMIZATION FUNCTIONS (Menu option 11)
+# ============================================================================================
+
+# 11. Debloat & Optimize Windows (orchestrator)
+function Invoke-DebloatAndOptimize {
+    param(
+        [string]$ScriptDir
+    )
+
+    Write-Host
+    Write-Host "WARNING: This will:"
+    Write-Host "  - Remove bloatware (Xbox, consumer Teams/Chat, OneDrive, Widgets, Solitaire,"
+    Write-Host "    Bing news/weather tiles, and similar built-in apps - see debloat_list.txt)"
+    Write-Host "  - Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall,"
+    Write-Host "    Game DVR, dev-friendly Explorer settings)"
+    Write-Host "  - Disable a small set of non-essential services (telemetry, fax, retail"
+    Write-Host "    demo, Windows Insider service)"
+    Write-Host "  - Set a power plan appropriate for this machine (laptop vs desktop)"
+    Write-Host
+    Write-Host "This does NOT touch Windows Defender, Windows Update, the firewall, UAC, or"
+    Write-Host "Print Spooler."
+    Write-Host
+    $confirm = Read-Host "Are you sure you want to proceed? [y/N]"
+    if ($confirm -notin @('y', 'Y', 'yes', 'Yes')) {
+        Write-Host "Cancelled. Returning to menu."
+        return
+    }
+
+    Remove-Bloatware -ScriptDir $ScriptDir
+    Optimize-WindowsPrivacyPerformance
+    Disable-UnneededServices
+    Set-PowerPlan
+
+    Write-Host
+    Write-Host "Debloat and optimization completed. A sign-out or restart is recommended for all changes to fully take effect."
 }
 
 # Helper for Remove-Bloatware: OneDrive is a Win32 install, not an Appx package.
@@ -895,40 +924,11 @@ function Set-PowerPlan {
     }
 }
 
-# 11. Debloat & Optimize Windows (orchestrator)
-function Invoke-DebloatAndOptimize {
-    param(
-        [string]$ScriptDir
-    )
+# ============================================================================================
+# ORCHESTRATORS (Multi-step runners)
+# ============================================================================================
 
-    Write-Host
-    Write-Host "WARNING: This will:"
-    Write-Host "  - Remove bloatware (Xbox, consumer Teams/Chat, OneDrive, Widgets, Solitaire,"
-    Write-Host "    Bing news/weather tiles, and similar built-in apps - see debloat_list.txt)"
-    Write-Host "  - Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall,"
-    Write-Host "    Game DVR, dev-friendly Explorer settings)"
-    Write-Host "  - Disable a small set of non-essential services (telemetry, fax, retail"
-    Write-Host "    demo, Windows Insider service)"
-    Write-Host "  - Set a power plan appropriate for this machine (laptop vs desktop)"
-    Write-Host
-    Write-Host "This does NOT touch Windows Defender, Windows Update, the firewall, UAC, or"
-    Write-Host "Print Spooler."
-    Write-Host
-    $confirm = Read-Host "Are you sure you want to proceed? [y/N]"
-    if ($confirm -notin @('y', 'Y', 'yes', 'Yes')) {
-        Write-Host "Cancelled. Returning to menu."
-        return
-    }
-
-    Remove-Bloatware -ScriptDir $ScriptDir
-    Optimize-WindowsPrivacyPerformance
-    Disable-UnneededServices
-    Set-PowerPlan
-
-    Write-Host
-    Write-Host "Debloat and optimization completed. A sign-out or restart is recommended for all changes to fully take effect."
-}
-
+# 12. Execute all setup steps
 function Invoke-All-Install-Tasks {
     param(
         [string]$ScriptDir
