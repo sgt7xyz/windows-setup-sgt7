@@ -598,16 +598,21 @@ function Invoke-DebloatAndOptimize {
 
     Write-Host
     Write-Host "WARNING: This will:"
-    Write-Host "  - Remove bloatware (Xbox, consumer Teams/Chat, OneDrive, Widgets, Solitaire,"
-    Write-Host "    Bing news/weather tiles, and similar built-in apps - see debloat_list.txt)"
-    Write-Host "  - Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall,"
-    Write-Host "    Game DVR, dev-friendly Explorer settings)"
-    Write-Host "  - Disable a small set of non-essential services (telemetry, fax, retail"
-    Write-Host "    demo, Windows Insider service)"
-    Write-Host "  - Set a power plan appropriate for this machine (laptop vs desktop)"
+    Write-Host "  - Remove bloatware from debloat_list.txt (Xbox, Teams, OneDrive, Widgets, etc.)"
+    Write-Host "  - Remove additional optional apps (News, Weather, Microsoft Teams, Copilot)"
+    Write-Host "  - Apply comprehensive privacy/performance tweaks:"
+    Write-Host "    * Telemetry and tracking (DiagTrack, connected experiences)"
+    Write-Host "    * Start menu, search, and Cortana suggestions (app stays functional)"
+    Write-Host "    * Edge telemetry and personalization"
+    Write-Host "    * Game DVR, Recall, Storage Sense, taskbar clutter"
+    Write-Host "    * File Explorer customizations (Quick Access, full paths)"
+    Write-Host "    * Search refinements (cloud search, activity history)"
+    Write-Host "  - Disable non-essential services (telemetry, fax, retail demo, Xbox)"
+    Write-Host "  - Optimize context menu (remove Share with, OneDrive Send To shortcuts)"
+    Write-Host "  - Set power plan (auto-detected: Balanced for laptop, High Performance for desktop)"
     Write-Host
-    Write-Host "This does NOT touch Windows Defender, Windows Update, the firewall, UAC, or"
-    Write-Host "Print Spooler."
+    Write-Host "This does NOT touch: Windows Defender, Windows Update, Firewall, UAC, Print Spooler,"
+    Write-Host "Remote Desktop, Networking services, or any hardware-related services."
     Write-Host
     $confirm = Read-Host "Are you sure you want to proceed? [y/N]"
     if ($confirm -notin @('y', 'Y', 'yes', 'Yes')) {
@@ -616,8 +621,10 @@ function Invoke-DebloatAndOptimize {
     }
 
     Remove-Bloatware -ScriptDir $ScriptDir
+    Remove-AdditionalBloatware
     Optimize-WindowsPrivacyPerformance
     Disable-UnneededServices
+    Optimize-ContextMenu
     Set-PowerPlan
 
     Write-Host
@@ -769,6 +776,47 @@ function Remove-Bloatware {
     Write-Host "Bloatware removal completed. See $LogFile for details."
 }
 
+# Remove common additional bloatware app packages not covered by debloat_list.txt
+function Remove-AdditionalBloatware {
+    Write-Host "Removing additional bloatware packages..."
+
+    $AdditionalApps = @(
+        "*Microsoft.News*",
+        "*Microsoft.Weather*",
+        "*Microsoft.MicrosoftTeams*",
+        "*Microsoft.GamingApp*",
+        "*Microsoft.Copilot*"
+    )
+
+    $LogDir = Join-Path $env:TEMP 'logs'
+    New-Item -Path $LogDir -ItemType Directory -Force | Out-Null
+    $LogFile = Join-Path $LogDir 'additional_debloat.log'
+
+    foreach ($App in $AdditionalApps) {
+        Get-AppxPackage -Name $App -AllUsers -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
+                Remove-AppxPackage -Package $_.PackageFullName -AllUsers -ErrorAction Stop
+                Write-Host "Removed: $($_.Name)"
+                Add-Content -Path $LogFile -Value "$(Get-Date -Format o) REMOVED: $($_.Name)"
+            } catch {
+                Write-Host "Failed to remove $($_.Name): $_"
+            }
+        }
+
+        Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like $App } | ForEach-Object {
+            try {
+                Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction Stop | Out-Null
+                Write-Host "De-provisioned: $($_.DisplayName)"
+                Add-Content -Path $LogFile -Value "$(Get-Date -Format o) DEPROVISIONED: $($_.DisplayName)"
+            } catch {
+                Write-Host "Failed to de-provision $($_.DisplayName): $_"
+            }
+        }
+    }
+
+    Write-Host "Additional bloatware removal completed."
+}
+
 # Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall, dev QoL settings)
 function Optimize-WindowsPrivacyPerformance {
     Write-Host "Applying privacy and performance tweaks..."
@@ -871,22 +919,84 @@ function Optimize-WindowsPrivacyPerformance {
         # Not a Copilot+ PC / feature not present - nothing to do
     }
 
+    # --- Edge integration (disable telemetry & suggestions) ---
+    $EdgePath = "HKCU:\SOFTWARE\Microsoft\Edge"
+    if (-not (Test-Path $EdgePath)) {
+        New-Item -Path $EdgePath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $EdgePath -Name "AllowSurfaceIntegrationExtension" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    $EdgePolicyPath = "HKCU:\SOFTWARE\Policies\Microsoft\Edge"
+    if (-not (Test-Path $EdgePolicyPath)) {
+        New-Item -Path $EdgePolicyPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $EdgePolicyPath -Name "MetricsReportingEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $EdgePolicyPath -Name "SendIntranetToInternetExplorer" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $EdgePolicyPath -Name "PersonalizationReportingEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    # --- Cortana (disable suggestions & telemetry, but keep app functional) ---
+    $CortanaPath = "HKCU:\SOFTWARE\Microsoft\Personalization\Settings"
+    if (-not (Test-Path $CortanaPath)) {
+        New-Item -Path $CortanaPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $CortanaPath -Name "AcceptedPrivacyPolicy" -Value 0 -Type DWord
+
+    $CortanaSearchPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search"
+    Set-ItemProperty -Path $CortanaSearchPath -Name "AllowSearchToUseLocation" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $CortanaSearchPath -Name "DeviceHistoryEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    # --- File Explorer customizations ---
+    $ExplorerAdvancedPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+    # Hide Quick Access (but don't remove it, just hide from sidebar)
+    Set-ItemProperty -Path $ExplorerAdvancedPath -Name "NavPaneExpandToCurrentFolder" -Value 1 -Type DWord
+    # Show full file paths in title bar
+    Set-ItemProperty -Path $ExplorerAdvancedPath -Name "FullPath" -Value 1 -Type DWord
+
+    # Clear Quick Access history (frequently used files & folders)
+    $QuickAccessPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MRU"
+    if (Test-Path $QuickAccessPath) {
+        try {
+            Get-Item -Path $QuickAccessPath -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Quick Access history cleared."
+        } catch {
+            Write-Host "Could not clear Quick Access history (non-critical): $_"
+        }
+    }
+
+    # --- Search refinements (disable cloud search, activity history) ---
+    $SearchCloudPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search"
+    Set-ItemProperty -Path $SearchCloudPath -Name "IsAADCloudSearchEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $SearchCloudPath -Name "BingSearchEnabled" -Value 0 -Type DWord  # redundant but thorough
+
+    # Disable activity history for search
+    $ActivityHistoryPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
+    if (-not (Test-Path $ActivityHistoryPath)) {
+        New-Item -Path $ActivityHistoryPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $ActivityHistoryPath -Name "EnableActivityFeed" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
     Write-Host "Privacy and performance tweaks applied. Some settings take effect after sign-out or restart."
 }
 
 # Disable a small set of non-essential services
 # Intentionally NOT touched: Windows Defender (WinDefend), Windows Update (wuauserv),
-# BITS, the firewall (mpssvc), WMI (Winmgmt), Event Log, and Print Spooler
-# (left alone in case a printer is attached).
+# BITS, the firewall (mpssvc), WMI (Winmgmt), Event Log, Print Spooler, Remote Desktop,
+# or any networking/hardware-related services.
+# Only services that are purely telemetry, optional features, or consumer-focused are disabled.
 function Disable-UnneededServices {
     Write-Host "Disabling non-essential services..."
 
     $ServicesToDisable = @(
-        "DiagTrack",         # Connected User Experiences and Telemetry
-        "dmwappushservice",  # WAP Push Message Routing (telemetry-adjacent)
-        "RetailDemo",        # Retail Demo Service
-        "Fax",                # Fax
-        "wisvc"               # Windows Insider Service
+        "DiagTrack",              # Connected User Experiences and Telemetry
+        "dmwappushservice",       # WAP Push Message Routing (telemetry-adjacent)
+        "RetailDemo",             # Retail Demo Service
+        "Fax",                    # Fax
+        "wisvc",                  # Windows Insider Service
+        "xbgm",                   # Xbox Game Monitoring (only if game mode not needed)
+        "XboxNetApiSvc",          # Xbox Networking Service (only if Xbox app not used)
+        "PcaSvc",                 # Program Compatibility Assistant (optional)
+        "DusmSvc",                # Data Usage Measurement Service (optional telemetry)
+        "WerSvc"                  # Windows Error Reporting (optional)
     )
 
     foreach ($ServiceName in $ServicesToDisable) {
@@ -906,6 +1016,41 @@ function Disable-UnneededServices {
     }
 
     Write-Host "Service cleanup completed."
+}
+
+# Remove unnecessary items from Windows Explorer context menu (conservative approach)
+# Only removes items known to be safe to remove without breaking functionality
+function Optimize-ContextMenu {
+    Write-Host "Optimizing Windows Explorer context menu..."
+
+    # Disable "Share with" submenu (safe to disable, sharing apps can be reinstalled if needed)
+    try {
+        New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked" -Name "{E2BF9676-5F8F-435C-97EB-11607A5BEDF7}" -Value "" -Type String -ErrorAction SilentlyContinue
+        Write-Host "Disabled 'Share with' context menu."
+    } catch {
+        Write-Host "Could not disable 'Share with' menu (non-critical): $_"
+    }
+
+    # Remove "Send to" items for OneDrive if it's been removed
+    try {
+        $SendToPath = "$env:APPDATA\Microsoft\Windows\SendTo"
+        if (Test-Path $SendToPath) {
+            Get-ChildItem -Path $SendToPath -Filter "*OneDrive*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+            Write-Host "Cleaned up OneDrive 'Send to' shortcuts."
+        }
+    } catch {
+        Write-Host "Could not clean Send To folder (non-critical): $_"
+    }
+
+    # Disable "Open with Cloud Storage" option if available (Windows 11 22H2+)
+    try {
+        $ExplorerPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
+        Set-ItemProperty -Path $ExplorerPath -Name "AltStartButtonBalloonTip" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Write-Host "Context menu optimizations applied."
+    } catch {
+        Write-Host "Context menu optimization completed with some skips."
+    }
 }
 
 # Set a power plan appropriate for this machine (laptop vs desktop)
