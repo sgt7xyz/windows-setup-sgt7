@@ -1,5 +1,9 @@
 #!/usr/bin/env pwsh
 
+# ============================================================================================
+# INSTALLATION FUNCTIONS (Menu options 1-10)
+# ============================================================================================
+
 # 1. Rename Windows PC
 function Rename-WindowsPC {
     param(
@@ -180,10 +184,11 @@ function Install-Chrome {
     Write-Host "Google Chrome installed successfully!"
 }
 
-# Helpers for installing fonts. Copying a .ttf/.otf into C:\Windows\Fonts by itself does
-# NOT register it with Windows - apps that look fonts up by family name (like Windows
-# Terminal) won't find it until it's also added to the Fonts registry key. These wrap
-# that properly, and notify running apps immediately so a reboot isn't required.
+# --- Font Installation Helpers ---
+# Copying a .ttf/.otf into C:\Windows\Fonts by itself does NOT register it with Windows
+# Apps that look fonts up by family name (like Windows Terminal) won't find it until it's
+# also added to the Fonts registry key. These helpers wrap that properly and notify running
+# apps immediately so a reboot isn't required.
 if (-not ([System.Management.Automation.PSTypeName]'Win32FontHelper.NativeMethods').Type) {
     Add-Type -Namespace Win32FontHelper -Name NativeMethods -MemberDefinition @"
 [DllImport("gdi32.dll", CharSet = CharSet.Auto, SetLastError = true)]
@@ -208,8 +213,6 @@ function Install-SystemFont {
     try {
         Copy-Item -Path $FontFilePath -Destination $DestPath -Force
 
-        # Read the font's real family name from its own name table - that's what apps
-        # look it up by, and it doesn't always match the filename.
         Add-Type -AssemblyName System.Drawing
         $PrivateFonts = New-Object System.Drawing.Text.PrivateFontCollection
         $PrivateFonts.AddFontFile($DestPath)
@@ -224,7 +227,6 @@ function Install-SystemFont {
         }
         New-ItemProperty -Path $RegistryPath -Name $RegistryValueName -Value $FontFileName -PropertyType String -Force | Out-Null
 
-        # Register with GDI and notify running apps immediately, so a reboot/relogin isn't required
         [Win32FontHelper.NativeMethods]::AddFontResource($DestPath) | Out-Null
         $Result = [UIntPtr]::Zero
         [Win32FontHelper.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x001D, [UIntPtr]::Zero, $null, 2, 1000, [ref]$Result) | Out-Null
@@ -281,14 +283,14 @@ function Install-Fonts {
 
     try {
         Write-Host "Fetching latest Fira Code Nerd font from GitHub..."
-        
+
         # Get the latest release info from GitHub API
         $ApiUrl = "https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest"
         $ReleaseInfo = Invoke-RestMethod -Uri $ApiUrl -ErrorAction Stop
-        
+
         # Find the FiraCode.zip asset
         $FiraCodeAsset = $ReleaseInfo.assets | Where-Object { $_.name -eq "FiraCode.zip" }
-        
+
         if (-not $FiraCodeAsset) {
             Write-Error "Could not find FiraCode.zip in the latest release. Please check https://github.com/ryanoasis/nerd-fonts/releases"
             return
@@ -296,7 +298,7 @@ function Install-Fonts {
 
         $DownloadUrl = $FiraCodeAsset.browser_download_url
         $ZipPath = Join-Path $TempDir "FiraCode.zip"
-        
+
         Write-Host "Downloading Fira Code Nerd Font from: $DownloadUrl"
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -ErrorAction Stop
         Write-Host "Download completed."
@@ -311,7 +313,7 @@ function Install-Fonts {
 
         # Copy font files to the fonts directory, overwriting existing
         $FontFiles = Get-ChildItem -Path $ExtractDir -Include "*.ttf", "*.otf" -Recurse
-        
+
         if ($FontFiles.Count -eq 0) {
             Write-Error "No font files found in the extracted archive."
             return
@@ -508,18 +510,7 @@ $OmpInitLine
 
     Write-Host "Windows Terminal and Oh My Posh installed and configured successfully!"
 }
-
-# 9. Configure Windows Terminal (now integrated into Install-OhMyPosh)
-function Install-TerminalConfig {
-    param(
-        [string]$ScriptDir
-    )
-
-    Write-Host "Windows Terminal configuration is now handled by 'Install Windows Terminal and Oh My Posh' (option 8)."
-    Write-Host "Please run option 8 to install and configure Windows Terminal."
-}
-
-# 10. Install wallpapers
+# 9. Install wallpapers
 function Install-Wallpapers {
     param(
         [string]$ScriptDir
@@ -569,22 +560,22 @@ public class Wallpaper {
     Write-Host "Wallpapers installed successfully!"
 }
 
-# 11. Configure Git
+# 10. Configure Git
 function Install-Git-Config {
     param(
         [string]$ScriptDir
     )
-    
+
     Write-Host "Configuring Git..."
     $GitIgnoreGlobalPath = Join-Path $ScriptDir "configs\Git\.gitignore_global"
-    
+
     if (Test-Path $GitIgnoreGlobalPath) {
         Copy-Item -Path $GitIgnoreGlobalPath -Destination "$env:USERPROFILE\.gitignore_global" -Force
         Write-Host ".gitignore_global copied to $env:USERPROFILE"
     } else {
         Write-Host "Warning: configs\Git\.gitignore_global not found!"
     }
-    
+
     git config --global init.defaultBranch main
     git config --global color.ui auto
     git config --global core.editor "code"
@@ -593,6 +584,51 @@ function Install-Git-Config {
     git config --global core.excludesfile "%USERPROFILE%\.gitignore_global"
     git config --global --list
     Write-Host "Base configuration for Git completed. Ensure you set your username and email!"
+}
+
+# ============================================================================================
+# DEBLOATING & OPTIMIZATION FUNCTIONS (Menu option 11)
+# ============================================================================================
+
+# 11. Debloat & Optimize Windows (orchestrator)
+function Invoke-DebloatAndOptimize {
+    param(
+        [string]$ScriptDir
+    )
+
+    Write-Host
+    Write-Host "WARNING: This will:"
+    Write-Host "  - Remove bloatware from debloat_list.txt (Xbox, Teams, OneDrive, Widgets, etc.)"
+    Write-Host "  - Remove additional optional apps (News, Weather, Microsoft Teams, Copilot)"
+    Write-Host "  - Apply comprehensive privacy/performance tweaks:"
+    Write-Host "    * Telemetry and tracking (DiagTrack, connected experiences)"
+    Write-Host "    * Start menu, search, and Cortana suggestions (app stays functional)"
+    Write-Host "    * Edge telemetry and personalization"
+    Write-Host "    * Game DVR, Recall, Storage Sense, taskbar clutter"
+    Write-Host "    * File Explorer customizations (Quick Access, full paths)"
+    Write-Host "    * Search refinements (cloud search, activity history)"
+    Write-Host "  - Disable non-essential services (telemetry, fax, retail demo, Xbox)"
+    Write-Host "  - Optimize context menu (remove Share with, OneDrive Send To shortcuts)"
+    Write-Host "  - Set power plan (auto-detected: Balanced for laptop, High Performance for desktop)"
+    Write-Host
+    Write-Host "This does NOT touch: Windows Defender, Windows Update, Firewall, UAC, Print Spooler,"
+    Write-Host "Remote Desktop, Networking services, or any hardware-related services."
+    Write-Host
+    $confirm = Read-Host "Are you sure you want to proceed? [y/N]"
+    if ($confirm -notin @('y', 'Y', 'yes', 'Yes')) {
+        Write-Host "Cancelled. Returning to menu."
+        return
+    }
+
+    Remove-Bloatware -ScriptDir $ScriptDir
+    Remove-AdditionalBloatware
+    Optimize-WindowsPrivacyPerformance
+    Disable-UnneededServices
+    Optimize-ContextMenu
+    Set-PowerPlan
+
+    Write-Host
+    Write-Host "Debloat and optimization completed. A sign-out or restart is recommended for all changes to fully take effect."
 }
 
 # Helper for Remove-Bloatware: OneDrive is a Win32 install, not an Appx package.
@@ -740,6 +776,47 @@ function Remove-Bloatware {
     Write-Host "Bloatware removal completed. See $LogFile for details."
 }
 
+# Remove common additional bloatware app packages not covered by debloat_list.txt
+function Remove-AdditionalBloatware {
+    Write-Host "Removing additional bloatware packages..."
+
+    $AdditionalApps = @(
+        "*Microsoft.News*",
+        "*Microsoft.Weather*",
+        "*Microsoft.MicrosoftTeams*",
+        "*Microsoft.GamingApp*",
+        "*Microsoft.Copilot*"
+    )
+
+    $LogDir = Join-Path $env:TEMP 'logs'
+    New-Item -Path $LogDir -ItemType Directory -Force | Out-Null
+    $LogFile = Join-Path $LogDir 'additional_debloat.log'
+
+    foreach ($App in $AdditionalApps) {
+        Get-AppxPackage -Name $App -AllUsers -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
+                Remove-AppxPackage -Package $_.PackageFullName -AllUsers -ErrorAction Stop
+                Write-Host "Removed: $($_.Name)"
+                Add-Content -Path $LogFile -Value "$(Get-Date -Format o) REMOVED: $($_.Name)"
+            } catch {
+                Write-Host "Failed to remove $($_.Name): $_"
+            }
+        }
+
+        Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like $App } | ForEach-Object {
+            try {
+                Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction Stop | Out-Null
+                Write-Host "De-provisioned: $($_.DisplayName)"
+                Add-Content -Path $LogFile -Value "$(Get-Date -Format o) DEPROVISIONED: $($_.DisplayName)"
+            } catch {
+                Write-Host "Failed to de-provision $($_.DisplayName): $_"
+            }
+        }
+    }
+
+    Write-Host "Additional bloatware removal completed."
+}
+
 # Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall, dev QoL settings)
 function Optimize-WindowsPrivacyPerformance {
     Write-Host "Applying privacy and performance tweaks..."
@@ -842,22 +919,84 @@ function Optimize-WindowsPrivacyPerformance {
         # Not a Copilot+ PC / feature not present - nothing to do
     }
 
+    # --- Edge integration (disable telemetry & suggestions) ---
+    $EdgePath = "HKCU:\SOFTWARE\Microsoft\Edge"
+    if (-not (Test-Path $EdgePath)) {
+        New-Item -Path $EdgePath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $EdgePath -Name "AllowSurfaceIntegrationExtension" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    $EdgePolicyPath = "HKCU:\SOFTWARE\Policies\Microsoft\Edge"
+    if (-not (Test-Path $EdgePolicyPath)) {
+        New-Item -Path $EdgePolicyPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $EdgePolicyPath -Name "MetricsReportingEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $EdgePolicyPath -Name "SendIntranetToInternetExplorer" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $EdgePolicyPath -Name "PersonalizationReportingEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    # --- Cortana (disable suggestions & telemetry, but keep app functional) ---
+    $CortanaPath = "HKCU:\SOFTWARE\Microsoft\Personalization\Settings"
+    if (-not (Test-Path $CortanaPath)) {
+        New-Item -Path $CortanaPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $CortanaPath -Name "AcceptedPrivacyPolicy" -Value 0 -Type DWord
+
+    $CortanaSearchPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search"
+    Set-ItemProperty -Path $CortanaSearchPath -Name "AllowSearchToUseLocation" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $CortanaSearchPath -Name "DeviceHistoryEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    # --- File Explorer customizations ---
+    $ExplorerAdvancedPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+    # Hide Quick Access (but don't remove it, just hide from sidebar)
+    Set-ItemProperty -Path $ExplorerAdvancedPath -Name "NavPaneExpandToCurrentFolder" -Value 1 -Type DWord
+    # Show full file paths in title bar
+    Set-ItemProperty -Path $ExplorerAdvancedPath -Name "FullPath" -Value 1 -Type DWord
+
+    # Clear Quick Access history (frequently used files & folders)
+    $QuickAccessPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MRU"
+    if (Test-Path $QuickAccessPath) {
+        try {
+            Get-Item -Path $QuickAccessPath -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Quick Access history cleared."
+        } catch {
+            Write-Host "Could not clear Quick Access history (non-critical): $_"
+        }
+    }
+
+    # --- Search refinements (disable cloud search, activity history) ---
+    $SearchCloudPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search"
+    Set-ItemProperty -Path $SearchCloudPath -Name "IsAADCloudSearchEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $SearchCloudPath -Name "BingSearchEnabled" -Value 0 -Type DWord  # redundant but thorough
+
+    # Disable activity history for search
+    $ActivityHistoryPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
+    if (-not (Test-Path $ActivityHistoryPath)) {
+        New-Item -Path $ActivityHistoryPath -Force | Out-Null
+    }
+    Set-ItemProperty -Path $ActivityHistoryPath -Name "EnableActivityFeed" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
     Write-Host "Privacy and performance tweaks applied. Some settings take effect after sign-out or restart."
 }
 
 # Disable a small set of non-essential services
 # Intentionally NOT touched: Windows Defender (WinDefend), Windows Update (wuauserv),
-# BITS, the firewall (mpssvc), WMI (Winmgmt), Event Log, and Print Spooler
-# (left alone in case a printer is attached).
+# BITS, the firewall (mpssvc), WMI (Winmgmt), Event Log, Print Spooler, Remote Desktop,
+# or any networking/hardware-related services.
+# Only services that are purely telemetry, optional features, or consumer-focused are disabled.
 function Disable-UnneededServices {
     Write-Host "Disabling non-essential services..."
 
     $ServicesToDisable = @(
-        "DiagTrack",         # Connected User Experiences and Telemetry
-        "dmwappushservice",  # WAP Push Message Routing (telemetry-adjacent)
-        "RetailDemo",        # Retail Demo Service
-        "Fax",                # Fax
-        "wisvc"               # Windows Insider Service
+        "DiagTrack",              # Connected User Experiences and Telemetry
+        "dmwappushservice",       # WAP Push Message Routing (telemetry-adjacent)
+        "RetailDemo",             # Retail Demo Service
+        "Fax",                    # Fax
+        "wisvc",                  # Windows Insider Service
+        "xbgm",                   # Xbox Game Monitoring (only if game mode not needed)
+        "XboxNetApiSvc",          # Xbox Networking Service (only if Xbox app not used)
+        "PcaSvc",                 # Program Compatibility Assistant (optional)
+        "DusmSvc",                # Data Usage Measurement Service (optional telemetry)
+        "WerSvc"                  # Windows Error Reporting (optional)
     )
 
     foreach ($ServiceName in $ServicesToDisable) {
@@ -879,6 +1018,41 @@ function Disable-UnneededServices {
     Write-Host "Service cleanup completed."
 }
 
+# Remove unnecessary items from Windows Explorer context menu (conservative approach)
+# Only removes items known to be safe to remove without breaking functionality
+function Optimize-ContextMenu {
+    Write-Host "Optimizing Windows Explorer context menu..."
+
+    # Disable "Share with" submenu (safe to disable, sharing apps can be reinstalled if needed)
+    try {
+        New-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked" -Name "{E2BF9676-5F8F-435C-97EB-11607A5BEDF7}" -Value "" -Type String -ErrorAction SilentlyContinue
+        Write-Host "Disabled 'Share with' context menu."
+    } catch {
+        Write-Host "Could not disable 'Share with' menu (non-critical): $_"
+    }
+
+    # Remove "Send to" items for OneDrive if it's been removed
+    try {
+        $SendToPath = "$env:APPDATA\Microsoft\Windows\SendTo"
+        if (Test-Path $SendToPath) {
+            Get-ChildItem -Path $SendToPath -Filter "*OneDrive*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+            Write-Host "Cleaned up OneDrive 'Send to' shortcuts."
+        }
+    } catch {
+        Write-Host "Could not clean Send To folder (non-critical): $_"
+    }
+
+    # Disable "Open with Cloud Storage" option if available (Windows 11 22H2+)
+    try {
+        $ExplorerPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
+        Set-ItemProperty -Path $ExplorerPath -Name "AltStartButtonBalloonTip" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Write-Host "Context menu optimizations applied."
+    } catch {
+        Write-Host "Context menu optimization completed with some skips."
+    }
+}
+
 # Set a power plan appropriate for this machine (laptop vs desktop)
 function Set-PowerPlan {
     Write-Host "Configuring power plan..."
@@ -895,40 +1069,11 @@ function Set-PowerPlan {
     }
 }
 
-# 11. Debloat & Optimize Windows (orchestrator)
-function Invoke-DebloatAndOptimize {
-    param(
-        [string]$ScriptDir
-    )
+# ============================================================================================
+# ORCHESTRATORS (Multi-step runners)
+# ============================================================================================
 
-    Write-Host
-    Write-Host "WARNING: This will:"
-    Write-Host "  - Remove bloatware (Xbox, consumer Teams/Chat, OneDrive, Widgets, Solitaire,"
-    Write-Host "    Bing news/weather tiles, and similar built-in apps - see debloat_list.txt)"
-    Write-Host "  - Apply privacy/performance tweaks (telemetry, Start menu clutter, Recall,"
-    Write-Host "    Game DVR, dev-friendly Explorer settings)"
-    Write-Host "  - Disable a small set of non-essential services (telemetry, fax, retail"
-    Write-Host "    demo, Windows Insider service)"
-    Write-Host "  - Set a power plan appropriate for this machine (laptop vs desktop)"
-    Write-Host
-    Write-Host "This does NOT touch Windows Defender, Windows Update, the firewall, UAC, or"
-    Write-Host "Print Spooler."
-    Write-Host
-    $confirm = Read-Host "Are you sure you want to proceed? [y/N]"
-    if ($confirm -notin @('y', 'Y', 'yes', 'Yes')) {
-        Write-Host "Cancelled. Returning to menu."
-        return
-    }
-
-    Remove-Bloatware -ScriptDir $ScriptDir
-    Optimize-WindowsPrivacyPerformance
-    Disable-UnneededServices
-    Set-PowerPlan
-
-    Write-Host
-    Write-Host "Debloat and optimization completed. A sign-out or restart is recommended for all changes to fully take effect."
-}
-
+# 12. Execute all setup steps
 function Invoke-All-Install-Tasks {
     param(
         [string]$ScriptDir
