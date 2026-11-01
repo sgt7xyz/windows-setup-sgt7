@@ -94,3 +94,44 @@ storage.sqlite
 
 # --- Script-generated runtime output ---
 logs/
+
+# SECURITY: Environment files hold real secrets. Only the fake example file is committed.
+.env
+.env.*
+!.env.example
+
+# SECURITY: Keys and certificates must never be committed.
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.jks
+id_rsa*
+id_ed25519*
+
+# SECURITY: Terraform state can contain secrets in plain text.
+*.tfstate
+*.tfstate.*
+crash.log
+.terraform/
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# NOTE: Variable files may hold secrets. Commit only the .example copies.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# SECURITY: Cloud and tool credentials.
+.aws/
+credentials
+*.secret
+*.secrets
+secrets.*
+!secrets.example.*
+.vault-pass*
+*.vault

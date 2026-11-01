@@ -142,6 +142,19 @@ The setup script automatically configures **mise** integration in your PowerShel
 
 11. **Debloat & Optimize Windows** (`Invoke-DebloatAndOptimize`)
     - Not included in "Execute all steps" — this is an explicit, opt-in step since it changes default OS behavior more than the other options do.
+
+### Automation
+
+12. **Schedule Automated Maintenance Tasks** (`Schedule-MaintenanceTask`)
+    - Sets up two scheduled tasks that run automatically to maintain Windows 11 cleanliness after Windows updates.
+    - **Weekly task** (Sunday 2:00 AM): Re-applies privacy/performance registry tweaks, disables telemetry services, and optimizes context menu.
+    - **Monthly task** (Sunday 3:00 AM, every 4 weeks): Includes all weekly tasks plus verifies OneDrive policy block.
+    - Copies the `scripts/win11-maintenance.ps1` script to a secure location (`C:\ProgramFiles\WindowsSetup`).
+    - Registers both tasks to run as `NT AUTHORITY\SYSTEM` with highest privilege level.
+    - Creates a `logs/` directory for timestamped maintenance logs.
+    - Displays configuration details including task locations and log file path.
+    - Tasks can be managed or removed via Windows Task Scheduler if needed.
+    - This ensures that Windows updates do not undo your privacy and debloating customizations.
     - Prompts for confirmation before making any changes, and clearly states up front what it will and will not touch.
     - Removes built-in Windows bloatware (`Remove-Bloatware`):
       - Deletes the packages listed in `debloat_list.txt` (Xbox app/overlays, consumer Teams/Chat, Widgets, Solitaire, Bing news/weather/finance/sports tiles, 3D Viewer, Mixed Reality Portal, Paint 3D, Skype, People, Feedback Hub, Get Help, Tips, Clipchamp, Family Safety, Office Hub, Cortana app).
@@ -163,8 +176,8 @@ The setup script automatically configures **mise** integration in your PowerShel
 
 ### Execute All
 
-12. **Execute All** (`Invoke-All-Install-Tasks`)
-    - Runs all setup tasks in the following sequence (does **not** include Debloat & Optimize — run that separately if you want it):
+13. **Execute All** (`Invoke-All-Install-Tasks`)
+    - Runs all setup tasks in the following sequence (does **not** include Debloat & Optimize or Schedule Maintenance — run those separately if you want them):
       1. Rename Windows PC
       2. Install winget
       3. Update and Patch Windows
